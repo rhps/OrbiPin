@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+build/
+*.local
+
+# environment & secrets — never commit
+.env
+.env.*
+!.env.example
+
+# convex
+.convex/
+_convex/
+
+# sandbox — experiments, discussions, temporary notes (NEVER pushed)
+sandbox/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# logs
+*.log
+npm-debug.log*
+
+# caches
+.cache/
+.eslintcache
+*.tsbuildinfo
