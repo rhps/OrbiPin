@@ -72,6 +72,9 @@ export default function App() {
         if (sourceRef.current && eventsRef.current.length > 0) {
           pushEventsToMap(eventsRef.current);
         }
+        // land the user on the sunlit side: center opposite the night centroid
+        const { lng: sunLng } = solar.sunSubpoint(new Date());
+        map.jumpTo({ center: [sunLng, 10], zoom: 2.2 });
       });
 
       map.on("style.load", () => {
@@ -92,7 +95,7 @@ export default function App() {
                 quoted: ev.quotedPhrase,
                 sources: ev.sources.length,
                 color: tierColor(ev.tier),
-                highlight: "highlight" in ev ? (ev as { highlight?: string }).highlight ?? "" : "",
+                highlight: "geoCode" in ev ? (ev as { geoCode?: string }).geoCode ?? "" : "highlight" in ev ? (ev as { highlight?: string }).highlight ?? "" : "",
               },
               geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
             })),

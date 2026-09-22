@@ -1,7 +1,6 @@
 // G1 hover-highlight: pin hover lights the area polygon for its tier.
 // Ported from the verified sandbox spike.
 import * as maplibregl from "maplibre-gl";
-import type { AreaFeature } from "../demoAreas";
 
 export function registerAreaHighlight(map: maplibregl.Map): () => void {
   let hoveredArea: string | number | null = null;
@@ -17,11 +16,13 @@ export function registerAreaHighlight(map: maplibregl.Map): () => void {
     map.getCanvas().style.cursor = "pointer";
     const f = e.features?.[0];
     if (!f) return;
-    const code = (f.properties as { highlight?: string } | null)?.highlight;
+    // real events carry geoCode; demo pins carry highlight — accept both
+    const props = f.properties as { highlight?: string; geoCode?: string } | null;
+    const code = props?.highlight || props?.geoCode || "";
     if (!code) return; // city tier: no polygon to light up
     const target = map.querySourceFeatures("areas", {
       filter: ["==", ["get", "code"], code],
-    })[0] as unknown as AreaFeature | undefined;
+    })[0];
     if (target) {
       clearHover();
       hoveredArea = target.id ?? null;
