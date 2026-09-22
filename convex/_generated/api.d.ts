@@ -16,6 +16,7 @@ import type * as extract from "../extract.js";
 import type * as followers from "../followers.js";
 import type * as geoLookup from "../geoLookup.js";
 import type * as mapData from "../mapData.js";
+import type * as places from "../places.js";
 import type * as repair from "../repair.js";
 import type * as reprocess from "../reprocess.js";
 import type * as rss from "../rss.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   followers: typeof followers;
   geoLookup: typeof geoLookup;
   mapData: typeof mapData;
+  places: typeof places;
   repair: typeof repair;
   reprocess: typeof reprocess;
   rss: typeof rss;

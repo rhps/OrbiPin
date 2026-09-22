@@ -3,7 +3,8 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { resolvePlace } from "./geoLookup";
+import { resolvePlace } from "./places";
+import { resolveCountry } from "./geoLookup";
 
 interface ExtractedEvent {
   isSignificantWorldEvent: boolean;
@@ -87,24 +88,60 @@ If the headline names no place at all, use country="${args.country}" tier="count
       return { ok: false, stage: "G1", error: "quotedPhrase not verbatim" };
     }
 
-    // G2: resolve the place via the geo lookup table (works for all tiers —
-    // "Tokyo" → JP, "West Java" → ID-JB, "Yemen" → YE). Unresolvable → review queue.
-    const resolved = resolvePlace(extracted.placeName, extracted.tier);
-    if (!resolved) {
-      await ctx.runMutation(internal.extract.markRawItem, {
-        rawItemId: args.rawItemId,
-        state: "needs-geo-review",
-        note: `unresolved place: ${extracted.placeName} (${extracted.tier})`,
-      });
-      return { ok: true, stage: "review-queue" };
+    // G2: resolve the place — granular (city/adm2) first, country fallback.
+    // This spreads same-country events across actual cities/provinces instead
+    // of stacking every "Indonesia" story on one centroid.
+    let lng: number | undefined;
+    let lat: number | undefined;
+    let geoCode: string;
+    if (extracted.tier === "country") {
+      const c = resolveCountry(extracted.placeName) ?? resolveCountry(args.country);
+      if (!c) {
+        await ctx.runMutation(internal.extract.markRawItem, {
+          rawItemId: args.rawItemId,
+          state: "needs-geo-review",
+          note: `unresolved country: ${extracted.placeName}`,
+        });
+        return { ok: true, stage: "review-queue" };
+      }
+      geoCode = c.iso2;
+      lng = c.lng;
+      lat = c.lat;
+    } else {
+      const place = resolvePlace(extracted.placeName, extracted.tier);
+      if (place) {
+        geoCode = place.geoCode;
+        lng = place.lng;
+        lat = place.lat;
+      } else {
+        // unknown city — fall back to country centroid, flag for review
+        const c = resolveCountry(args.country);
+        if (!c) {
+          await ctx.runMutation(internal.extract.markRawItem, {
+            rawItemId: args.rawItemId,
+            state: "needs-geo-review",
+            note: `unresolved place: ${extracted.placeName} (${extracted.tier})`,
+          });
+          return { ok: true, stage: "review-queue" };
+        }
+        geoCode = c.iso2;
+        lng = c.lng;
+        lat = c.lat;
+        await ctx.runMutation(internal.extract.markRawItem, {
+          rawItemId: args.rawItemId,
+          state: "needs-geo-review",
+          note: `approx: ${extracted.placeName} → ${c.name} centroid`,
+        });
+        // still ingest at country precision — better than dropping the event
+      }
     }
 
     await ctx.runMutation(internal.extract.ingestVerified, {
       placeName: extracted.placeName,
       tier: extracted.tier,
-      geoCode: resolved.geoCode,
-      lng: resolved.lng,
-      lat: resolved.lat,
+      geoCode,
+      lng,
+      lat,
       event: extracted.event,
       quotedPhrase: extracted.quotedPhrase,
       severity: extracted.severity,

@@ -10,6 +10,7 @@ import * as solar from "./lib/solar";
 import { registerAreaHighlight } from "./lib/areaHighlight";
 import { assertNonEmptySources } from "./types";
 import { createEventsStream } from "./lib/convexData";
+import { spreadCoordinates } from "./lib/pinSpread";
 
 const BASE_STYLES = {
   nature: "https://tiles.openfreemap.org/styles/liberty",
@@ -92,7 +93,8 @@ export default function App() {
       mapRef.current.on("load", () => {
         sourceRef.current = (map.getSource("events") as maplibregl.GeoJSONSource) ?? null;
         if (sourceRef.current && eventsRef.current.length > 0) {
-          pushEventsToMap(eventsRef.current);
+          const z = mapRef.current?.getZoom() ?? 6;
+          pushEventsToMap(spreadCoordinates(eventsRef.current, 14, Math.max(z, 6)));
         }
         // land the user on the sunlit side: center opposite the night centroid
         const { lng: sunLng } = solar.sunSubpoint(new Date());
@@ -367,7 +369,7 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
   );
 }
 
-function pushEventsToMap(events: EventFeature[]) {
+function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displayLat?: number })[]) {
   const map = (window as any).__orbipinMap as maplibregl.Map | null;
   const src = map?.getSource("events") as maplibregl.GeoJSONSource | null;
   if (!map || !src) return;
@@ -386,7 +388,7 @@ function pushEventsToMap(events: EventFeature[]) {
         color: tierColor(ev.tier),
         highlight: "geoCode" in ev && ev.geoCode ? ev.geoCode : "",
       },
-      geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
+      geometry: { type: "Point" as const, coordinates: [ev._displayLng ?? ev.lng ?? 0, ev._displayLat ?? ev.lat ?? 0] },
     })),
   };
   src.setData(fc);
