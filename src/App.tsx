@@ -35,6 +35,9 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<EventFeature | null>(null);
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
+  const [debugLines, setDebugLines] = useState<string[]>([]);
+  const dbg = (line: string) =>
+    setDebugLines((prev) => [...prev.slice(-5), `${new Date().toISOString().slice(11, 19)} ${line}`]);
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
   const sourceRef = useRef<maplibregl.GeoJSONSource | null>(null);
@@ -42,6 +45,7 @@ export default function App() {
   // subscribe to live Convex data; fall back to demo until first payload
   useEffect(() => {
     const unsub = createEventsStream((events) => {
+      dbg(`convex poll: ${events.length} events`);
       if (events.length === 0) return;
       eventsRef.current = events;
       setDataSource("convex");
@@ -55,9 +59,23 @@ export default function App() {
     let cancelled = false;
 
     (async () => {
-      const style = await buildStyle(mode);
+      let style;
+      try {
+        style = await buildStyle(mode);
+        dbg("style fetched OK");
+      } catch (e: any) {
+        dbg(`style fetch FAILED: ${e?.message ?? e} — using inline fallback`);
+        style = {
+          version: 8,
+          projection: GLOBE,
+          glyphs: "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf",
+          sources: {},
+          layers: [{ id: "bg", type: "background", paint: { "background-color": "#060a12" } }],
+        };
+      }
       if (cancelled) return;
-      const map = new maplibregl.Map({
+      try {
+        const map = new maplibregl.Map({
         container: containerRef.current!,
         style,
         center: [107.6, -6.9],
@@ -66,6 +84,10 @@ export default function App() {
       });
       mapRef.current = map;
       (window as any).__orbipinMap = map;
+      map.on("error", (e: any) => {
+        dbg(`map error: ${e?.error?.message ?? "unknown"}`);
+      });
+      dbg("map created");
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
       mapRef.current.on("load", () => {
         sourceRef.current = (map.getSource("events") as maplibregl.GeoJSONSource) ?? null;
@@ -79,6 +101,7 @@ export default function App() {
 
       map.on("style.load", () => {
         map.setProjection(GLOBE); // re-assert after any style transition
+        dbg("style loaded, registering sources");
 
         // register sources/layers once (mode swaps rebuild the style)
         if (!map.getSource("events")) {
@@ -192,6 +215,10 @@ export default function App() {
 
         // terminator initial paint
         updateTerminator(map);
+        const evSrc = map.getSource("events") as maplibregl.GeoJSONSource | undefined;
+        void evSrc?.getData().then((d: any) => {
+          dbg(`events source has ${d?.features?.length ?? "?"} features`);
+        });
         setReady(true);
       });
 
@@ -214,6 +241,10 @@ export default function App() {
       });
       map.on("mouseenter", "event-pins", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-pins", () => { map.getCanvas().style.cursor = ""; });
+      } catch (e: any) {
+        dbg(`MAP INIT FAILED: ${e?.message ?? e}`);
+        setReady(false);
+      }
     })();
 
     return () => {
@@ -256,8 +287,11 @@ export default function App() {
           <div>Loading globe…</div>
         </div>
       )}
-      <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 10, fontSize: 11, color: "#8496b3" }}>
+      <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 10, fontSize: 11, color: "#8496b3", textAlign: "right" }}>
         data: {dataSource} · events: {eventsRef.current.length}
+      </div>
+      <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 10, fontSize: 11, color: "#8496b3", fontFamily: "monospace" }}>
+        {debugLines.map((l, i) => <div key={i}>{l}</div>)}
       </div>
       <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 6 }}>
         <HudButton onClick={toggleProjection}>
