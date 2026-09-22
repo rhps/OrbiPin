@@ -91,7 +91,7 @@ export const PLACES: PlaceEntry[] = [
 
 const normalize = (s: string) => s.trim().toLowerCase();
 
-export function resolvePlace(placeName: string, tier: string): {
+export function resolvePlace(placeName: string): {
   geoCode: string;
   lng: number;
   lat: number;

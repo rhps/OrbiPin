@@ -108,7 +108,7 @@ If the headline names no place at all, use country="${args.country}" tier="count
       lng = c.lng;
       lat = c.lat;
     } else {
-      const place = resolvePlace(extracted.placeName, extracted.tier);
+      const place = resolvePlace(extracted.placeName);
       if (place) {
         geoCode = place.geoCode;
         lng = place.lng;
