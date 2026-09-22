@@ -50,3 +50,22 @@ events across 14 countries in DB. React frontend with globe, cluster layers
 (z14), G1 hover polygons, day/night terminator, pin popups with hedged G5
 framing. CI on PRs (typecheck + preview deploy); prod deploy workflow
 tag-gated. Convex crons: 30-min crawl+extract, nightly stale-archive.
+
+### 2026-09-22 - epoch-zero + G3 dedup fix
+Verified live pass found two regressions; both fixed on `fix/epoch-zero-and-dedup`:
+1. Pin cards showed `1970-01-01` — `mapData:activeEventsGeo` sorted articles by
+   `publishedAt` but never exposed the date, and `convexData.ts` hardcoded
+   `publishedAt: 0` into the client source object. Fixed: `latestPublishedAt`
+   now flows through the GeoJSON properties (372/372 events carry real dates;
+   sample Yemen → 2026-09-21 15:14 UTC), and the card renders "date unknown"
+   when absent instead of epoch zero.
+2. G3 dedup effectively inert (8/372 multi-source = 2%): the deterministic
+   matcher required an exact 24-char event-label prefix, which never matches
+   across outlets that phrase the same story differently. Replaced with
+   word-overlap similarity (≥50% shared significant words, 48h window) per
+   spec 03; thresholds externalized to `gate.config.json` (spec 07).
+   Also tightened the extraction prompt: `quotedPhrase` must be the full
+   verbatim clause, not 2-word fragments (spec 02).
+Decision: existing 372 events keep their stored dates (now surfaced); new
+ingests benefit from the merge + prompt fixes. Convex features used:
+internal queries/actions, `withIndex` filters, GeoJSON query surface.
