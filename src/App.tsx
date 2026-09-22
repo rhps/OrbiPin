@@ -16,6 +16,12 @@ const BASE_STYLES = {
   nature: "https://tiles.openfreemap.org/styles/liberty",
   night: "https://tiles.openfreemap.org/styles/dark",
 };
+declare global {
+  interface Window {
+    __orbipinMap?: maplibregl.Map;
+  }
+}
+
 const GLOBE = { type: "globe" } as const;
 
 // Bake globe projection into the fetched base style (v5: style-root property;
@@ -42,6 +48,7 @@ export default function App() {
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
   const sourceRef = useRef<maplibregl.GeoJSONSource | null>(null);
+  const spiderfiedRef = useRef<{ lng: number; lat: number; id: number } | null>(null);
 
   // subscribe to live Convex data; fall back to demo until first payload
   useEffect(() => {
@@ -51,6 +58,7 @@ export default function App() {
       eventsRef.current = events;
       setDataSource("convex");
       pushEventsToMap(events);
+      if ((window as any).__orbiSpider) applySpiderfy();
     });
     return unsub;
   }, []);
@@ -85,6 +93,7 @@ export default function App() {
       });
       mapRef.current = map;
       (window as any).__orbipinMap = map;
+      (window as any).__orbiEvents = eventsRef;
       map.on("error", (e: any) => {
         dbg(`map error: ${e?.error?.message ?? "unknown"}`);
       });
@@ -235,21 +244,78 @@ export default function App() {
         if (pinHere) return; // a real pin is on top — let its handler win
         const f = map.queryRenderedFeatures(e.point, { layers: ["event-clusters"] })[0];
         if (!f) return;
-        const clusterId = (f.properties as { cluster_id?: number }).cluster_id;
         const lng = (f.geometry as GeoJSON.Point).coordinates[0];
         const lat = (f.geometry as GeoJSON.Point).coordinates[1];
-        const src = map.getSource("events") as maplibregl.GeoJSONSource & {
-          getClusterExpansionZoom: (id: number, cb: (err: any, zoom: number) => void) => void;
-        } | null;
-        if (!src || clusterId === undefined) {
-          map.easeTo({ center: [lng, lat], zoom: map.getZoom() + 2.5 });
-          return;
-        }
-        // expand exactly to the zoom where this cluster splits (spec 03)
-        src.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
-          if (err) return;
-          map.easeTo({ center: [lng, lat], zoom: Math.min(zoom + 0.3, 14.5) });
+
+        // spiderfy WITHOUT getClusterLeaves (times out in v6 workers): select
+        // members geometrically — events within clusterRadius px of center.
+        const z = map.getZoom();
+        const degPerPx = 360 / (256 * Math.pow(2, z));
+        const radiusDeg = 35 * degPerPx;
+        const members = eventsRef.current.filter((ev) => {
+          if (ev.lng === undefined || ev.lat === undefined) return false;
+          const dLng = (ev.lng - lng) * Math.cos(lat * Math.PI / 180);
+          const dLat = ev.lat - lat;
+          return Math.hypot(dLng, dLat) <= radiusDeg;
         });
+        if (members.length === 0) return;
+
+        spiderfiedRef.current = { lng, lat, id: members.length };
+
+        const offsets = spiderfyOffsets(members.length, 48);
+        const spread = members.map((ev, i) => {
+          const [ox, oy] = offsets[i];
+          return {
+            type: "Feature" as const,
+            properties: {
+              id: ev._id,
+              event: ev.event,
+              tier: ev.tier,
+              place: ev.placeName,
+              quoted: ev.quotedPhrase,
+              sources: ev.sources.length,
+              color: tierColor(ev.tier),
+              highlight: ev.geoCode ?? "",
+              spider: true,
+            },
+            geometry: { type: "Point" as const, coordinates: [
+              lng + ox * degPerPx,
+              lat + oy * degPerPx,
+            ] },
+          };
+        });
+        const rest = eventsRef.current
+          .filter((ev) => !members.includes(ev))
+          .map((ev) => ({
+            type: "Feature" as const,
+            properties: {
+              id: ev._id,
+              event: ev.event,
+              tier: ev.tier,
+              place: ev.placeName,
+              quoted: ev.quotedPhrase,
+              sources: ev.sources.length,
+              color: tierColor(ev.tier),
+              highlight: ev.geoCode ?? "",
+            },
+            geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
+          }));
+
+        const geo = map.getSource("events") as maplibregl.GeoJSONSource;
+        geo.setData({
+          type: "FeatureCollection",
+          features: [...spread, ...rest] as GeoJSON.Feature[],
+        });
+        dbg(`spiderfied ${members.length} pins around ${lng.toFixed(1)},${lat.toFixed(1)}`);
+        (window as any).__orbiSpiderfyAt = function(lng2: number, lat2: number) { spiderfyAtFrom(lng2, lat2, eventsRef, map); };
+      });
+
+      // background click collapses spiderfy
+      map.on("click", (e: maplibregl.MapMouseEvent) => {
+        const hits = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins"] });
+        if (hits.length === 0 && spiderfiedRef.current) {
+          clearSpiderfy();
+        }
       });
       map.on("mouseenter", "event-clusters", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-clusters", () => { map.getCanvas().style.cursor = ""; });
@@ -263,6 +329,10 @@ export default function App() {
       });
       map.on("mouseenter", "event-pins", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-pins", () => { map.getCanvas().style.cursor = ""; });
+      map.on("click", (e: maplibregl.MapMouseEvent) => {
+        const feats = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins"] });
+        if (feats.length === 0 && spiderfiedRef.current) { clearSpiderfy(); }
+      });
       } catch (e: any) {
         dbg(`MAP INIT FAILED: ${e?.message ?? e}`);
         setReady(false);
@@ -382,6 +452,101 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
       </div>
     </div>
   );
+}
+
+// ---------- Spiderfy: clicked cluster expands children in a circle ----------
+function spiderfyOffsets(count: number, radiusPx = 45): [number, number][] {
+  const out: [number, number][] = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
+    out.push([Math.cos(angle) * radiusPx, Math.sin(angle) * radiusPx]);
+  }
+  return out;
+}
+
+function applySpiderfy() {
+  const map = window.__orbipinMap;
+  const state = (window as any).__orbiSpider;
+  if (!map || !state) return;
+  const src = map.getSource("events") as any;
+  if (!src || state.id === undefined || !src.getClusterLeaves) return;
+  src.getClusterLeaves(state.id, 100, 0, (err: any, leaves: any[]) => {
+    if (err || !leaves?.length) return;
+    const offsets = spiderfyOffsets(leaves.length, 45);
+    const degPerPx = 360 / (256 * Math.pow(2, map.getZoom()));
+    const spaced = leaves.map((leaf: any, i: number) => {
+      const [ox, oy] = offsets[i % offsets.length];
+      const c = leaf.geometry.coordinates;
+      return {
+        ...leaf,
+        geometry: { type: "Point", coordinates: [c[0] + ox * degPerPx, c[1] + oy * degPerPx] },
+      };
+    });
+    src.setData({ type: "FeatureCollection", features: spaced });
+  });
+}
+
+function clearSpiderfy() {
+  (window as any).__orbiSpider = null;
+}
+
+function spiderfyAtFrom(
+  lng: number,
+  lat: number,
+  eventsRef: { current: EventFeature[] },
+  map: maplibregl.Map
+) {
+  const z = map.getZoom();
+  const degPerPx = 360 / (256 * Math.pow(2, z));
+  const radiusDeg = 35 * degPerPx;
+  const members = eventsRef.current.filter((ev) => {
+    if (ev.lng === undefined || ev.lat === undefined) return false;
+    const dLng = (ev.lng - lng) * Math.cos(lat * Math.PI / 180);
+    const dLat = ev.lat - lat;
+    return Math.hypot(dLng, dLat) <= radiusDeg;
+  });
+  if (members.length === 0) return;
+  const offsets = spiderfyOffsets(members.length, 48);
+  const spread = members.map((ev, i) => {
+    const [ox, oy] = offsets[i];
+    return {
+      type: "Feature" as const,
+      properties: {
+        id: ev._id,
+        event: ev.event,
+        tier: ev.tier,
+        place: ev.placeName,
+        quoted: ev.quotedPhrase,
+        sources: ev.sources.length,
+        color: tierColor(ev.tier),
+        highlight: ev.geoCode ?? "",
+        spider: true,
+      },
+      geometry: { type: "Point" as const, coordinates: [
+        lng + ox * degPerPx,
+        lat + oy * degPerPx,
+      ] },
+    };
+  });
+  const rest = eventsRef.current
+    .filter((ev) => !members.includes(ev))
+    .map((ev) => ({
+      type: "Feature" as const,
+      properties: {
+        id: ev._id,
+        event: ev.event,
+        tier: ev.tier,
+        place: ev.placeName,
+        quoted: ev.quotedPhrase,
+        sources: ev.sources.length,
+        color: tierColor(ev.tier),
+        highlight: ev.geoCode ?? "",
+      },
+      geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
+    }));
+  const geo = map.getSource("events") as maplibregl.GeoJSONSource;
+  geo.setData({ type: "FeatureCollection", features: [...spread, ...rest] as GeoJSON.Feature[] });
+  console.log("[OrbiPin] spiderfied " + members.length + " pins around " + lng.toFixed(1) + "," + lat.toFixed(1));
 }
 
 function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displayLat?: number })[]) {
