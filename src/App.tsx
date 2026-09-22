@@ -177,6 +177,8 @@ export default function App() {
             paint: {
               "fill-color": ["match", ["get", "code"], "ID-JB", "#ffb020", "TLS", "#39d98a", "#ffffff"],
               "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.28, 0],
+              // lift effect: hovered region lifts via brighter fill + soft outline glow
+              "fill-outline-color": ["case", ["boolean", ["feature-state", "hover"], false], "#ffffff", "rgba(255,255,255,0)"],
             },
           });
           map.addLayer({
@@ -185,11 +187,35 @@ export default function App() {
             source: "areas",
             paint: {
               "line-color": ["match", ["get", "code"], "ID-JB", "#ffb020", "TLS", "#39d98a", "#ffffff"],
-              "line-width": 1.4,
-              "line-opacity": 0.55,
+              "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 3, 1.4],
+              "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 1, 0.55],
+              // glow under hovered region
+              "line-blur": ["case", ["boolean", ["feature-state", "hover"], false], 2, 0],
             },
           });
         }
+
+        // country hover LIFT: direct mousemove on the fill layer (works for all
+        // areas incl. those without pins) + pointer cursor
+        map.on("mousemove", "area-fill", (e) => {
+          map.getCanvas().style.cursor = "pointer";
+          const f = (e as maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }).features?.[0];
+          if (f) {
+            const code = (f.properties as { code?: string }).code ?? "";
+            map.setPaintProperty("area-fill", "fill-opacity", [
+              "case",
+              ["==", ["get", "code"], code], 0.38,   // hovered region lifts brighter
+              ["boolean", ["feature-state", "hover"], false], 0.28,
+              0,
+            ]);
+          }
+        });
+        map.on("mouseleave", "area-fill", () => {
+          map.getCanvas().style.cursor = "";
+          map.setPaintProperty("area-fill", "fill-opacity", [
+            "case", ["boolean", ["feature-state", "hover"], false], 0.28, 0,
+          ]);
+        });
         if (!map.getLayer("event-clusters")) {
           map.addLayer({
             id: "event-clusters",
@@ -268,9 +294,8 @@ export default function App() {
       });
 
       map.on("click", "event-clusters", (e: maplibregl.MapMouseEvent) => {
-        const pinHere = map.queryRenderedFeatures(e.point, { layers: ["event-pins", "spider-pins"] })[0];
-        if (pinHere) return; // a real pin is on top — let its handler win
-        const f = map.queryRenderedFeatures(e.point, { layers: ["event-clusters"] })[0];
+        const f = (e as maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }).features?.[0]
+          ?? map.queryRenderedFeatures(e.point, { layers: ["event-clusters"] })[0];
         if (!f) return;
         const lng = (f.geometry as GeoJSON.Point).coordinates[0];
         const lat = (f.geometry as GeoJSON.Point).coordinates[1];
@@ -290,11 +315,26 @@ export default function App() {
       });
       map.on("mouseenter", "event-pins", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-pins", () => { map.getCanvas().style.cursor = ""; });
-      // background click (nothing hit) collapses spiderfy — registered last so
-      // layer-specific handlers run first; maplibre stops propagation per-layer.
+      // collapse on ANY click not on a spider pin. queryRenderedFeatures is
+      // unreliable for geojson layers here, so test geometrically: is the click
+      // within 12px of any spider feature center?
       map.on("click", (e: maplibregl.MapMouseEvent) => {
-        const feats = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins", "spider-pins"] });
-        if (feats.length === 0) { clearSpiderfy(); }
+        // clicks on clusters/pins have their own handlers — only collapse on
+        // clicks that hit NOTHING interactive (true background)
+        const interactive = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins"] });
+        if (interactive.length > 0) return;
+        const spider = map.getSource("spider-pins") as maplibregl.GeoJSONSource | undefined;
+        if (!spider) return;
+        void spider.getData().then((data: any) => {
+          const feats = data.features ?? [];
+          if (feats.length === 0) return;
+          const onSpider = feats.some((f: any) => {
+            const c = f.geometry.coordinates;
+            const p = map.project(c as [number, number]);
+            return Math.hypot(p.x - e.point.x, p.y - e.point.y) < 14;
+          });
+          if (!onSpider) clearSpiderfy();
+        });
       });
 
       // spiderfied pins: select on click (opens popup, no collapse)
@@ -487,9 +527,15 @@ function spiderfyAt(lng: number, lat: number, allEvents: EventFeature[]) {
 
 function clearSpiderfy() {
   (window as any).__orbiSpiderActive = null;
+  const map = window.__orbipinMap;
+  if (!map) return;
+  // CRITICAL: empty the spider source — the fanned pins live there
+  const spider = map.getSource("spider-pins") as maplibregl.GeoJSONSource;
+  if (spider) spider.setData({ type: "FeatureCollection", features: [] });
+  // restore the clustered view with all events
   const evs = (window as any).__orbiEvents?.current;
   if (evs?.length) {
-    const z = window.__orbipinMap?.getZoom() ?? 6;
+    const z = map.getZoom();
     pushEventsToMap(spreadCoordinates(evs, 14, Math.max(z, 4)));
   }
 }
