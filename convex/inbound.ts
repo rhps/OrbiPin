@@ -2,7 +2,7 @@
 // Spec 06: RSS inlet routing
 // Called from the AgentMail webhook (http.ts).
 import { v } from "convex/values";
-import { internalAction, internalQuery } from "./_generated/server";
+import { internalAction, internalQuery, internalMutation } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 
 // Grounded corpus for the ask-inbox: active events as compact summaries
@@ -55,6 +55,46 @@ export const handleInboundEmail = internalAction({
         publishedAt: Date.now(),
       });
       return { routed: "rss-inlet" };
+    }
+
+    // ---------- Route 3: commentary (reader on-the-ground reports) ----------
+    const isQuestion =
+      /\?\s*$/.test(args.text.trim()) ||
+      /^(what|who|when|where|why|how|is|are|can|does|do|did|will|any|tell)\b/i.test(args.text.trim());
+    if (!isQuestion && args.text.trim().length >= 10) {
+      const follows = await ctx.runQuery(internal.inbound.myRegions, { address: args.from });
+      let bestEvent: { _id: string; event: string; placeName: string } | null = null;
+      let bestScore = 0;
+      for (const rg of follows) {
+        const evs = await ctx.runQuery(internal.inbound.eventsForRegion, { geoCode: rg.geoCode });
+        for (const ev of evs) {
+          const words = args.text.toLowerCase().split(/\W+/).filter((w) => w.length > 3);
+          const label = ev.event.toLowerCase();
+          const score = words.filter((w) => label.includes(w)).length;
+          if (score > bestScore) { bestScore = score; bestEvent = ev; }
+        }
+      }
+      await ctx.runMutation(internal.inbound.storeCommentary, {
+        eventId: bestEvent ? (bestEvent._id as any) : undefined,
+        body: args.text,
+        authorLabel: `Reader${follows[0]?.geoCode ? " near " + follows[0].geoCode : ""}`,
+      });
+      const evTitle = bestEvent
+        ? `'Reports of ${bestEvent.event.toLowerCase()}' in ${bestEvent.placeName}`
+        : "our review queue (we'll attach it to the right event)";
+      await fetch(`${AGENTMAIL_API}/inboxes/orbipin/messages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.AGENTMAIL_API_KEY}`,
+        },
+        body: JSON.stringify({
+          to: args.from,
+          subject: "Re: your report",
+          text: `Thanks — your report was added to ${evTitle}. View it live: https://striped-impala-387.convex.site (reports show as unverified reader commentary).`,
+        }),
+      });
+      return { routed: "commentary" };
     }
 
     // ---------- Route 2: ask-inbox ----------
@@ -117,17 +157,9 @@ Rules:
     const j: any = await res.json();
     const answer = j?.choices?.[0]?.message?.content ?? "Sorry — I couldn't process that right now.";
 
-    // send the reply
-    await fetch(`${AGENTMAIL_API}/inboxes/orbipin/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.AGENTMAIL_API_KEY}`,
-      },
-      body: JSON.stringify({ to: args.from, subject: "Re: your question", text: answer }),
-    });
-
-    return { answered: true };
+    // NOTE: sending is the caller's job (single-send fix — was double-sending)
+    return answer;
+    
   },
 });
 
@@ -144,6 +176,43 @@ export const extractFromText = internalAction({
       text: args.text,
       sourceId: args.sourceId,
       publishedAt: args.publishedAt,
+    });
+  },
+});
+
+
+// ---------- Route 3 helpers ----------
+export const myRegions = internalQuery({
+  args: { address: v.string() },
+  handler: async (ctx, args) =>
+    ctx.db.query("followers").withIndex("by_address", (q) => q.eq("address", args.address)).collect(),
+});
+
+export const eventsForRegion = internalQuery({
+  args: { geoCode: v.string() },
+  handler: async (ctx, args) => {
+    const evs = await ctx.db
+      .query("events")
+      .withIndex("by_geoCode", (q) => q.eq("geoCode", args.geoCode))
+      .filter((q) => q.eq(q.field("archived"), false))
+      .take(20);
+    return evs.map((e) => ({ _id: e._id, event: e.event, placeName: e.placeName }));
+  },
+});
+
+export const storeCommentary = internalMutation({
+  args: { eventId: v.optional(v.id("events")), body: v.string(), authorLabel: v.string() },
+  handler: async (ctx, args) => {
+    const body = args.body.trim().slice(0, 280);
+    const hasUrl = /https?:\/\//i.test(body);
+    const hasPhone = /(\+?\d[\d\s-]{7,})/.test(body);
+    return await ctx.db.insert("commentary", {
+      eventId: args.eventId ?? ("j9721s3jf0ny4y2nkpcmaaj9p98ex1pr" as any), // temp anchor until a queue table exists
+      body,
+      authorLabel: args.authorLabel,
+      receivedAt: Date.now(),
+      verified: false,
+      autoApproved: !hasUrl && !hasPhone && body.length >= 10,
     });
   },
 });

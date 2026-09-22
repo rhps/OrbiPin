@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Img, staticFile, interpolate, Easing, useCurrentFrame } from "remotion";
-import { useAuthoredFrame, useAuthoredFrames } from "./timing";
-import { colors, EXPO, fonts } from "./theme";
+import { useAuthoredFrame, useAuthoredFrames } from "../timing";
+import { colors, EXPOEASE, fonts } from "../theme";
 
 /* Voiceover files per beat */
 const VO = (n: number) => staticFile(`vo/0${n}.mp3`);
@@ -28,8 +28,8 @@ export const HookScene: React.FC = () => {
       <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: 120 }}>
         <div style={{
           fontFamily: fonts.sans, fontWeight: 600, fontSize: 72, color: colors.ink,
-          opacity: interpolate(frame, [12, 34], [0, 1], { easing: Easing.bezier(...EXPO) }),
-          transform: `translateY(${interpolate(frame, [12, 34], [30, 0], { easing: Easing.bezier(...EXPO) })}px)`,
+          opacity: interpolate(frame, [12, 34], [0, 1], { easing: EXPOEASE }),
+          transform: `translateY(${interpolate(frame, [12, 34], [30, 0], { easing: EXPOEASE })}px)`,
           textShadow: "0 4px 24px rgba(0,0,0,0.6)",
         }}>
           Your region, live on a globe.
@@ -49,8 +49,8 @@ export const ProblemScene: React.FC = () => {
     style: {
       fontFamily: fonts.sans, fontWeight: muted ? 400 : 600, fontSize: size,
       color: muted ? colors.inkMuted : colors.ink,
-      opacity: interpolate(frame, [from, from + 16], [0, 1], { easing: Easing.bezier(...EXPO) }),
-      transform: `translateY(${interpolate(frame, [from, from + 16], [22, 0], { easing: Easing.bezier(...EXPO) })}px)`,
+      opacity: interpolate(frame, [from, from + 16], [0, 1], { easing: EXPOEASE }),
+      transform: `translateY(${interpolate(frame, [from, from + 16], [22, 0], { easing: EXPOEASE })}px)`,
     } as React.CSSProperties,
     key: text,
     children: text,
@@ -67,7 +67,7 @@ export const ProblemScene: React.FC = () => {
 /* ============ Beat 3: Pulse — live demo footage (660-1140) ============ */
 export const PulseScene: React.FC = () => {
   const frame = useAuthoredFrame();
-  const captionIn = interpolate(frame, [30, 48], [0, 1], { easing: Easing.bezier(...EXPO) });
+  const captionIn = interpolate(frame, [30, 48], [0, 1], { easing: EXPOEASE });
   return (
     <AbsoluteFill style={{ backgroundColor: colors.space }}>
       {/* live-demo footage is composited at composition level via Video; this scene = caption layer */}
@@ -77,7 +77,7 @@ export const PulseScene: React.FC = () => {
           background: "rgba(6,10,18,0.72)", padding: "14px 34px", borderRadius: 12,
           border: `1px solid ${colors.cardBorder}`,
           opacity: captionIn,
-          transform: `translateY(${interpolate(frame, [30, 48], [18, 0], { easing: Easing.bezier(...EXPO) })}px)`,
+          transform: `translateY(${interpolate(frame, [30, 48], [18, 0], { easing: EXPOEASE })}px)`,
         }}>
           Live. A new report → a pin appears. No refresh.
         </div>
@@ -100,7 +100,7 @@ export const TrustScene: React.FC = () => {
         src={staticFile(shots[idx])}
         style={{
           width: "100%", height: "100%", objectFit: "cover",
-          transform: `scale(${interpolate(localFrame, [0, 160], [1.12, 1.0], { easing: Easing.bezier(...EXPO) })})`,
+          transform: `scale(${interpolate(localFrame, [0, 160], [1.12, 1.0], { easing: EXPOEASE })})`,
           opacity: interpolate(localFrame, [0, 10], [0, 1], { easing: Easing.linear }),
         }}
       />
@@ -108,7 +108,7 @@ export const TrustScene: React.FC = () => {
       <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: 84 }}>
         <div style={{
           fontFamily: fonts.sans, fontSize: 34, fontWeight: 500, color: colors.ink,
-          opacity: interpolate(localFrame, [20, 38], [0, 1], { easing: Easing.bezier(...EXPO) }),
+          opacity: interpolate(localFrame, [20, 38], [0, 1], { easing: EXPOEASE }),
         }}>
           Reports of an event — sources one click away.
         </div>
@@ -134,13 +134,13 @@ export const FollowScene: React.FC = () => {
       <AbsoluteFill style={{ justifyContent: "flex-end", alignItems: "center", paddingBottom: 84, gap: 12 }}>
         <div style={{
           fontFamily: fonts.sans, fontSize: 34, fontWeight: 500, color: colors.ink,
-          opacity: interpolate(frame, [24, 42], [0, 1], { easing: Easing.bezier(...EXPO) }),
+          opacity: interpolate(frame, [24, 42], [0, 1], { easing: EXPOEASE }),
         }}>
           Follow your region — the digest lands in your inbox.
         </div>
         <div style={{
           fontFamily: fonts.sans, fontSize: 30, fontWeight: 400, color: colors.accentWarm,
-          opacity: interpolate(frame, [230, 250], [0, 1], { easing: Easing.bezier(...EXPO) }),
+          opacity: interpolate(frame, [230, 250], [0, 1], { easing: EXPOEASE }),
         }}>
           Reply to the email — your note joins the event.
         </div>
@@ -162,7 +162,7 @@ export const StackScene: React.FC = () => {
   return (
     <AbsoluteFill style={{ backgroundColor: colors.space, justifyContent: "center", alignItems: "center" }}>
       <div style={{ fontFamily: fonts.sans, fontSize: 40, fontWeight: 600, color: colors.inkMuted, marginBottom: 48,
-        opacity: interpolate(frame, [10, 30], [0, 1], { easing: Easing.bezier(...EXPO) }) }}>
+        opacity: interpolate(frame, [10, 30], [0, 1], { easing: EXPOEASE }) }}>
         Built on
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 28, width: 900 }}>
@@ -173,8 +173,8 @@ export const StackScene: React.FC = () => {
               display: "flex", gap: 28, alignItems: "center",
               background: colors.card, border: `1px solid ${colors.cardBorder}`, borderRadius: 16,
               padding: "30px 40px",
-              opacity: interpolate(frame, [from, from + 20], [0, 1], { easing: Easing.bezier(...EXPO) }),
-              transform: `translateX(${interpolate(frame, [from, from + 20], [40, 0], { easing: Easing.bezier(...EXPO) })}px)`,
+              opacity: interpolate(frame, [from, from + 20], [0, 1], { easing: EXPOEASE }),
+              transform: `translateX(${interpolate(frame, [from, from + 20], [40, 0], { easing: EXPOEASE })}px)`,
             }}>
               <div style={{ fontFamily: fonts.sans, fontSize: 44, fontWeight: 700, color: colors.accent, minWidth: 300 }}>
                 {s.name}
@@ -198,21 +198,21 @@ export const OutroScene: React.FC = () => {
     <AbsoluteFill style={{ backgroundColor: colors.space, justifyContent: "center", alignItems: "center", gap: 20 }}>
       <div style={{
         fontFamily: fonts.sans, fontSize: 84, fontWeight: 700, color: colors.ink,
-        opacity: interpolate(frame, [6, 26], [0, 1], { easing: Easing.bezier(...EXPO) }),
+        opacity: interpolate(frame, [6, 26], [0, 1], { easing: EXPOEASE }),
         letterSpacing: "-0.02em",
       }}>
         OrbiPin
       </div>
       <div style={{
         fontFamily: fonts.sans, fontSize: 40, color: colors.inkMuted,
-        opacity: interpolate(frame, [30, 50], [0, 1], { easing: Easing.bezier(...EXPO) }),
+        opacity: interpolate(frame, [30, 50], [0, 1], { easing: EXPOEASE }),
       }}>
         Every event, a pin on the planet.
       </div>
       <div style={{
         fontFamily: fonts.sans, fontSize: 34, fontWeight: 600, color: colors.accentWarm, marginTop: 40,
         padding: "16px 44px", background: colors.card, borderRadius: 12, border: `1px solid ${colors.cardBorder}`,
-        opacity: interpolate(frame, [54, 74], [0, 1], { easing: Easing.bezier(...EXPO) }),
+        opacity: interpolate(frame, [54, 74], [0, 1], { easing: EXPOEASE }),
       }}>
         striped-impala-387.convex.site
       </div>

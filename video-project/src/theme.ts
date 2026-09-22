@@ -22,4 +22,6 @@ export const colors = {
 };
 
 /* The one easing voice of the video: expo-out (inspo pattern) */
-export const EXPO = [0.16, 1, 0.3, 1] as const;
+import { Easing } from "remotion";
+export const EXPO = [0.16, 1, 0.3, 1] as [number, number, number, number];
+export const EXPOEASE = Easing.bezier(EXPO[0], EXPO[1], EXPO[2], EXPO[3]);
