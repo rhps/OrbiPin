@@ -10,6 +10,7 @@ import { registerAreaHighlight } from "./lib/areaHighlight";
 import { assertNonEmptySources } from "./types";
 import { createEventsStream } from "./lib/convexData";
 import FollowPanelLazy from "./FollowPanel";
+import { categoryOf } from "./lib/categories";
 import { spreadCoordinates } from "./lib/pinSpread";
 
 const BASE_STYLES = {
@@ -150,6 +151,29 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
             clusterMaxZoom: 6,
           });
         }
+        // category icons (Twemoji, self-hosted): images are wiped on style
+        // swap → re-add here on every style.load (regression-tested)
+        if (!map.hasImage("cat-flood")) {
+          const ICONS: Record<string, string> = {
+            "cat-conflict": "icons/conflict.png",
+            "cat-flood": "icons/flood.png",
+            "cat-quake": "icons/quake.png",
+            "cat-fire": "icons/fire.png",
+            "cat-storm": "icons/storm.png",
+            "cat-volcano": "icons/volcano.png",
+            "cat-health": "icons/health.png",
+            "cat-politics": "icons/politics.png",
+            "cat-other": "icons/other.png",
+          };
+          for (const [id, url] of Object.entries(ICONS)) {
+            void fetch(`${import.meta.env.BASE_URL}${url}`)
+              .then((r) => (r.ok ? r.blob() : null))
+              .then((b) => (b ? createImageBitmap(b) : null))
+              .then((bmp) => { if (bmp) map.addImage(id, bmp); })
+              .catch(() => { /* icon stays missing → fallback dot */ });
+          }
+        }
+
         if (!map.getSource("areas")) {
           // spec 02: real geoBoundaries assets, promoteId so feature-state hover
           // can bind (the id-less bug that killed hover before). Lazy-load
@@ -300,30 +324,61 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
             paint: { "text-color": "#ffffff" },
           });
         }
+          // breathing halo under icons — non-restrained categories only (G6)
           map.addLayer({
-            id: "event-pins",
+            id: "event-pin-halo",
             type: "circle",
             source: "events",
-            filter: ["!", ["has", "point_count"]],
+            filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "restrained"], false]],
             paint: {
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 7, 10, 14],
-              "circle-color": ["get", "color"],
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 1.2,
-              "circle-opacity": 0.95,
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 11, 10, 20],
+              "circle-color": ["get", "catColor"],
+              "circle-opacity": 0.35,
+              "circle-blur": 1,
+            },
+          });
+          map.addLayer({
+            id: "event-pins",
+            type: "symbol",
+            source: "events",
+            filter: ["!", ["has", "point_count"]],
+            layout: {
+              "icon-image": ["coalesce", ["image", ["get", "iconId"]], ["image", "cat-other"]],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 2, 0.32, 10, 0.62],
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "icon-padding": 2,
+            },
+            paint: {
+              "icon-opacity": ["case", ["==", ["get", "restrained"], true], 0.75, 1],
             },
           });
           // spiderfied pins: separate non-clustered layer (spec 03)
           map.addLayer({
-            id: "spider-pins",
+            id: "spider-pin-halo",
             type: "circle",
             source: "spider-pins",
+            filter: ["==", ["get", "restrained"], false],
             paint: {
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 7, 10, 14],
-              "circle-color": ["get", "color"],
-              "circle-stroke-color": "#ffffff",
-              "circle-stroke-width": 1.2,
-              "circle-opacity": 0.95,
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 11, 10, 20],
+              "circle-color": ["get", "catColor"],
+              "circle-opacity": 0.35,
+              "circle-blur": 1,
+            },
+          });
+          map.addLayer({
+            id: "spider-pins",
+            type: "symbol",
+            source: "spider-pins",
+            layout: {
+              "icon-image": ["coalesce", ["image", ["get", "iconId"]], ["image", "cat-other"]],
+              "icon-size": ["interpolate", ["linear"], ["zoom"], 2, 0.32, 10, 0.62],
+              "icon-allow-overlap": true,
+              "icon-ignore-placement": true,
+              "icon-padding": 2,
+            },
+            paint: {
+              "icon-opacity": ["case", ["==", ["get", "restrained"], true], 0.75, 1],
             },
           });
         }
@@ -343,6 +398,19 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
           setFollowRegion({ geoCode: code, label: p.name ?? code });
           setShowFollow(true);
         });
+
+        // breathing halo pulse (sine 0.15↔0.45, 1.2s) — respects reduced motion
+        const mquery = window.matchMedia("(prefers-reduced-motion: reduce)");
+        if (!mquery.matches) {
+          let tick = 0;
+          const pulse = () => {
+            if (!map.getLayer("event-pin-halo")) return;
+            const o = 0.3 + 0.15 * Math.sin(tick++ * 0.5);
+            map.setPaintProperty("event-pin-halo", "circle-opacity", o);
+            if (map.getLayer("spider-pin-halo")) map.setPaintProperty("spider-pin-halo", "circle-opacity", o);
+          };
+          window.setInterval(pulse, 1200);
+        }
 
         // terminator initial paint
         updateTerminator(map);
@@ -641,6 +709,9 @@ function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displa
         quoted: ev.quotedPhrase,
         sources: ev.sources.length,
         color: tierColor(ev.tier),
+        iconId: categoryOf(ev.event).iconId,
+        catColor: categoryOf(ev.event).color,
+        restrained: categoryOf(ev.event).restrained,
         highlight: "geoCode" in ev && ev.geoCode ? ev.geoCode : "",
       },
       geometry: { type: "Point" as const, coordinates: [ev._displayLng ?? ev.lng ?? 0, ev._displayLat ?? ev.lat ?? 0] },

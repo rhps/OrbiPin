@@ -105,3 +105,31 @@ burst-limited; dedup on merge. Chrome-verified live: 24 areas after boot,
 36 after panning to Europe, 48 after South America; hover binds (Ecuador
 → {hover:true}); click opens panel pre-filled "Brazil". geoBoundaries
 CC-BY attribution retained.
+
+### 2026-09-22 - category icons on pins (Twemoji + breathing halo)
+`feature/category-icons`: replaced plain dot pins with category symbol icons.
+1. **Icons**: 9 self-hosted Twemoji 72px PNGs in `public/icons/` (conflict
+   🚨, flood 🌊, quake, fire 🔥, storm 🌀, volcano 🌋, health, politics,
+   other 📍). Loaded via `addImage()` at every `style.load` (survives swaps —
+   verified: 3/3 icons present after `setStyle`).
+2. **Category derivation**: deterministic keyword map in
+   `src/lib/categories.ts` (no LLM change, no backfill) — client-side
+   classify of the event label. Live mix: other 260, conflict 44, politics
+   26, storm 5, fire 4, flood 1. Unknown → `cat-other` fallback (never a
+   blank pin); `icon-image` uses `coalesce` so even a missing sprite can't
+   produce fallback boxes.
+3. **Layers**: `event-pins`/`spider-pins` are symbol layers now
+   (`icon-image`, z-interpolated `icon-size` 0.32→0.62); new
+   `event-pin-halo`/`spider-pin-halo` circle layers beneath (blurred,
+   category color). Clusters stay count circles.
+4. **Animation**: breathing halo — sine opacity 0.15↔0.45 on a 1.2s
+   `setInterval` (paint-property, GPU-cheap); skipped entirely under
+   `prefers-reduced-motion: reduce`. Verified live: halo paint animating
+   (0.44 sampled mid-cycle).
+5. **G6**: conflict category = `restrained: true` → no halo (layer filter)
+   + icon at 0.75 opacity. Verified live on a real conflict event
+   ("US strikes on drug boats"): pin rendered, zero halo → PASS. Gate
+   script `scripts/gate-icons.mjs` asserts 9 icons shipped + conflict
+   restrained → PASS.
+6. All 340 events carry iconId; style-swap survival verified (icons + data
+   re-registered).
