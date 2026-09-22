@@ -345,13 +345,17 @@ export const ingestVerified = internalMutation({
     };
 
     if (match) {
-      await ctx.db.patch(match._id, { lastSeenAt: now });
+      await ctx.db.patch(match._id, {
+        lastSeenAt: now,
+        searchText: `${args.event} ${args.placeName}`.toLowerCase(), // spec 12: never lags
+      });
       await ctx.db.insert("articles", { ...args.article, eventId: match._id });
       return { attachedTo: match._id };
     }
 
     const eventId = await ctx.db.insert("events", {
       event: args.event,
+      searchText: `${args.event} ${args.placeName}`.toLowerCase(), // spec 12 derived
       placeName: args.placeName,
       tier: args.tier,
       geoCode: args.geoCode,
@@ -367,5 +371,34 @@ export const ingestVerified = internalMutation({
     await ctx.db.insert("articles", { ...args.article, eventId });
     void source;
     return { created: eventId };
+  },
+});
+
+export const listAllForBackfill = internalQuery({
+  args: {},
+  handler: async (ctx) => ctx.db.query("events").collect(),
+});
+
+export const patchSearchText = internalMutation({
+  args: { id: v.id("events"), searchText: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, { searchText: args.searchText });
+  },
+});
+
+// one-off: backfill searchText for events written before spec 12
+export const backfillSearchText = internalAction({
+  args: {},
+  handler: async (ctx) => {
+    const events = await ctx.runQuery(internal.extract.listAllForBackfill, {});
+    let n = 0;
+    for (const ev of events) {
+      await ctx.runMutation(internal.extract.patchSearchText, {
+        id: ev._id,
+        searchText: `${ev.event} ${ev.placeName}`.toLowerCase(),
+      });
+      n++;
+    }
+    return { patched: n };
   },
 });

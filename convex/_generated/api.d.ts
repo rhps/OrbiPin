@@ -23,6 +23,7 @@ import type * as places from "../places.js";
 import type * as repair from "../repair.js";
 import type * as reprocess from "../reprocess.js";
 import type * as rss from "../rss.js";
+import type * as search from "../search.js";
 import type * as sources from "../sources.js";
 import type * as verify from "../verify.js";
 
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   repair: typeof repair;
   reprocess: typeof reprocess;
   rss: typeof rss;
+  search: typeof search;
   sources: typeof sources;
   verify: typeof verify;
 }>;

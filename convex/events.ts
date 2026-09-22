@@ -56,6 +56,7 @@ export const upsertEvent = internalMutation({
     // genuinely new event — G5: first source makes sources non-empty at read time
     const eventId = await ctx.db.insert("events", {
       event: args.event,
+      searchText: `${args.event} ${args.placeName}`.toLowerCase(),
       placeName: args.placeName,
       tier: args.tier,
       geoCode: args.geoCode,

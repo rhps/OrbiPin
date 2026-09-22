@@ -12,6 +12,8 @@ import { createEventsStream } from "./lib/convexData";
 import FollowPanelLazy from "./FollowPanel";
 import { categoryOf } from "./lib/categories";
 import { Mail } from "lucide-react";
+import { Search as SearchIcon } from "lucide-react";
+import SearchPanelLazy from "./SearchPanel";
 import { spreadCoordinates } from "./lib/pinSpread";
 
 const BASE_STYLES = {
@@ -41,7 +43,28 @@ export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mode, setMode] = useState<Mode>("nature");
   const [projection, setProjection] = useState<"globe" | "mercator">("globe");
+  const [showSearch, setShowSearch] = useState(false);
+  const [queryActive, setQueryActive] = useState(false);
+
   const lastPullRef = useRef<number>(Date.now());
+  useEffect(() => {
+    const map = window.__orbipinMap;
+    if (!map || !map.getLayer("event-pins")) return;
+    const op = queryActive ? 0.15 : 1;
+    map.setPaintProperty("event-pins", "icon-opacity", ["case", ["==", ["get", "restrained"], true], 0.75 * (queryActive ? 0.2 : 1), op]);
+    if (map.getLayer("event-pin-halo")) map.setPaintProperty("event-pin-halo", "circle-opacity", queryActive ? 0.05 : 0.3);
+  }, [queryActive]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "/" && !showSearch && (e.target as HTMLElement)?.tagName !== "INPUT") {
+        e.preventDefault();
+        setShowSearch(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showSearch]);
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<EventFeature | null>(null);
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
@@ -554,11 +577,35 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
             <button className={mode === "nature" ? "on" : ""} onClick={() => mode !== "nature" && toggleMode()}>Day</button>
             <button className={mode === "night" ? "on" : ""} onClick={() => mode !== "night" && toggleMode()}>Night</button>
           </div>
+          <button className="chip-btn" onClick={() => setShowSearch(true)} aria-label="Search (press /)">
+            <SearchIcon size={13} /> Search
+          </button>
           <button className="chip-btn" onClick={() => setShowFollow((v) => !v)}>
             <Mail size={13} /> Follow
           </button>
         </div>
       </div>
+      <SearchPanelLazy
+        convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}
+        open={showSearch}
+        onClose={() => { setShowSearch(false); setQueryActive(false); }}
+        onQueryActive={setQueryActive}
+        onPick={(h) => {
+          const map = window.__orbipinMap;
+          if (map && h.lng != null && h.lat != null) {
+            map.flyTo({ center: [h.lng, h.lat], zoom: Math.max(map.getZoom(), 5), duration: 1200 });
+          }
+          // open the same G5 card the map uses (even without coords)
+          setSelected({
+            _id: h._id, event: h.event, tier: h.tier as any, placeName: h.placeName, geoCode: h.geoCode ?? "",
+            quotedPhrase: h.quotedPhrase, severity: 3,
+            lng: h.lng ?? 0, lat: h.lat ?? 0,
+            sources: [], lastSeenAt: h.lastSeenAt, occurredAt: 0,
+          });
+          setShowSearch(false);
+          setQueryActive(false);
+        }}
+      />
       {showFollow && (
         <FollowPanelLazy
           convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}
@@ -581,8 +628,11 @@ function humanized(ms: number): string {
 }
 
 function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void }) {
-  assertNonEmptySources(event.sources);
-  const newest = [...event.sources].sort((a, b) => b.publishedAt - a.publishedAt)[0];
+  // G5 is enforced at ingest (write path). The card tolerates a bare search
+  // hit (no sources loaded) — it shows "sources loading" instead of lying.
+  if (event.sources.length > 0) assertNonEmptySources(event.sources);
+  const newest = [...event.sources].sort((a, b) => b.publishedAt - a.publishedAt)[0]
+    ?? { url: "", publisher: "source details on the map pin", title: "", publishedAt: 0 };
   const [following, setFollowing] = useState(false);
   // Escape closes the card (a11y, task 8)
   useEffect(() => {

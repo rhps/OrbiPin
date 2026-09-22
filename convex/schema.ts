@@ -16,11 +16,16 @@ export default defineSchema({
     occurredAt: v.number(),
     archived: v.boolean(), // G4
     provenance: v.union(v.literal("crawl"), v.literal("rss-inlet"), v.literal("gdelt-backfill")),
+    searchText: v.optional(v.string()), // spec 12: derived (optional during backfill; always written on new events)
   })
     .index("by_archived", ["archived"])
     .index("by_geoCode", ["geoCode"])
     .index("by_cluster", ["storyClusterId"])
-    .index("by_lastSeenAt", ["lastSeenAt"]),
+    .index("by_lastSeenAt", ["lastSeenAt"])
+    .searchIndex("search_events", {
+      searchField: "searchText",
+      filterFields: ["tier", "archived", "geoCode", "lastSeenAt"],
+    }),
 
   articles: defineTable({
     url: v.string(),
