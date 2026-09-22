@@ -49,7 +49,6 @@ export default function App() {
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
   const sourceRef = useRef<maplibregl.GeoJSONSource | null>(null);
-  const spiderfiedRef = useRef<{ lng: number; lat: number; id: number } | null>(null);
 
   // subscribe to live Convex data; fall back to demo until first payload
   useEffect(() => {
@@ -59,7 +58,6 @@ export default function App() {
       eventsRef.current = events;
       setDataSource("convex");
       pushEventsToMap(events);
-      if ((window as any).__orbiSpider) applySpiderfy();
     });
     return unsub;
   }, []);
@@ -148,6 +146,13 @@ export default function App() {
         if (!map.getSource("areas")) {
           map.addSource("areas", { type: "geojson", data: { type: "FeatureCollection", features: demoAreas } });
         }
+        // spiderfy source: non-clustered so spread pins NEVER re-group
+        if (!map.getSource("spider-pins")) {
+          map.addSource("spider-pins", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+        }
         if (!map.getSource("night-side")) {
           map.addSource("night-side", {
             type: "geojson",
@@ -227,6 +232,19 @@ export default function App() {
               "circle-opacity": 0.95,
             },
           });
+          // spiderfied pins: separate non-clustered layer (spec 03)
+          map.addLayer({
+            id: "spider-pins",
+            type: "circle",
+            source: "spider-pins",
+            paint: {
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 7, 10, 14],
+              "circle-color": ["get", "color"],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 1.2,
+              "circle-opacity": 0.95,
+            },
+          });
         }
 
         if (!hoverCleanup.current) hoverCleanup.current = registerAreaHighlight(map);
@@ -250,83 +268,16 @@ export default function App() {
       });
 
       map.on("click", "event-clusters", (e: maplibregl.MapMouseEvent) => {
-        const pinHere = map.queryRenderedFeatures(e.point, { layers: ["event-pins"] })[0];
+        const pinHere = map.queryRenderedFeatures(e.point, { layers: ["event-pins", "spider-pins"] })[0];
         if (pinHere) return; // a real pin is on top — let its handler win
         const f = map.queryRenderedFeatures(e.point, { layers: ["event-clusters"] })[0];
         if (!f) return;
         const lng = (f.geometry as GeoJSON.Point).coordinates[0];
         const lat = (f.geometry as GeoJSON.Point).coordinates[1];
-
-        // spiderfy WITHOUT getClusterLeaves (times out in v6 workers): select
-        // members geometrically — events within clusterRadius px of center.
-        const z = map.getZoom();
-        const degPerPx = 360 / (256 * Math.pow(2, z));
-        const radiusDeg = 35 * degPerPx;
-        const members = eventsRef.current.filter((ev) => {
-          if (ev.lng === undefined || ev.lat === undefined) return false;
-          const dLng = (ev.lng - lng) * Math.cos(lat * Math.PI / 180);
-          const dLat = ev.lat - lat;
-          return Math.hypot(dLng, dLat) <= radiusDeg;
-        });
-        if (members.length === 0) return;
-
-        spiderfiedRef.current = { lng, lat, id: members.length };
-
-        const offsets = spiderfyOffsets(members.length, 48);
-        const spread = members.map((ev, i) => {
-          const [ox, oy] = offsets[i];
-          return {
-            type: "Feature" as const,
-            properties: {
-              id: ev._id,
-              event: ev.event,
-              tier: ev.tier,
-              place: ev.placeName,
-              quoted: ev.quotedPhrase,
-              sources: ev.sources.length,
-              color: tierColor(ev.tier),
-              highlight: ev.geoCode ?? "",
-              spider: true,
-            },
-            geometry: { type: "Point" as const, coordinates: [
-              lng + ox * degPerPx,
-              lat + oy * degPerPx,
-            ] },
-          };
-        });
-        const rest = eventsRef.current
-          .filter((ev) => !members.includes(ev))
-          .map((ev) => ({
-            type: "Feature" as const,
-            properties: {
-              id: ev._id,
-              event: ev.event,
-              tier: ev.tier,
-              place: ev.placeName,
-              quoted: ev.quotedPhrase,
-              sources: ev.sources.length,
-              color: tierColor(ev.tier),
-              highlight: ev.geoCode ?? "",
-            },
-            geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
-          }));
-
-        const geo = map.getSource("events") as maplibregl.GeoJSONSource;
-        geo.setData({
-          type: "FeatureCollection",
-          features: [...spread, ...rest] as GeoJSON.Feature[],
-        });
-        dbg(`spiderfied ${members.length} pins around ${lng.toFixed(1)},${lat.toFixed(1)}`);
-        (window as any).__orbiSpiderfyAt = function(lng2: number, lat2: number) { spiderfyAtFrom(lng2, lat2, eventsRef, map); };
+        spiderfyAt(lng, lat, eventsRef.current);
       });
 
-      // background click collapses spiderfy
-      map.on("click", (e: maplibregl.MapMouseEvent) => {
-        const hits = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins"] });
-        if (hits.length === 0 && spiderfiedRef.current) {
-          clearSpiderfy();
-        }
-      });
+      // (collapse handled by the unified background click below)
       map.on("mouseenter", "event-clusters", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-clusters", () => { map.getCanvas().style.cursor = ""; });
 
@@ -339,10 +290,23 @@ export default function App() {
       });
       map.on("mouseenter", "event-pins", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-pins", () => { map.getCanvas().style.cursor = ""; });
+      // background click (nothing hit) collapses spiderfy — registered last so
+      // layer-specific handlers run first; maplibre stops propagation per-layer.
       map.on("click", (e: maplibregl.MapMouseEvent) => {
-        const feats = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins"] });
-        if (feats.length === 0 && spiderfiedRef.current) { clearSpiderfy(); }
+        const feats = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins", "spider-pins"] });
+        if (feats.length === 0) { clearSpiderfy(); }
       });
+
+      // spiderfied pins: select on click (opens popup, no collapse)
+      map.on("click", "spider-pins", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const id = (f.properties as { id?: string }).id;
+        const ev = eventsRef.current.find((x) => x._id === id);
+        if (ev) setSelected(ev);
+      });
+      map.on("mouseenter", "spider-pins", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "spider-pins", () => { map.getCanvas().style.cursor = ""; });
       } catch (e: any) {
         dbg(`MAP INIT FAILED: ${e?.message ?? e}`);
         setReady(false);
@@ -397,7 +361,7 @@ export default function App() {
       <div ref={containerRef} className="map-container" />
       {selected && <PinPopup event={selected} onClose={() => setSelected(null)} />}
       {!ready && (
-        <div className="pin-popup">
+        <div className="pin-popup" onClick={(e) => e.stopPropagation()}>
           <h2>OrbiPin</h2>
           <div>Loading globe…</div>
         </div>
@@ -411,6 +375,9 @@ export default function App() {
         </HudButton>
         <HudButton onClick={toggleMode}>
           {mode === "nature" ? "🌑 Night" : "🌱 Nature"}
+        </HudButton>
+        <HudButton onClick={() => setShowFollow((v) => !v)}>
+          📧 Follow
         </HudButton>
       </div>
       {showFollow && (
@@ -447,7 +414,7 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
   assertNonEmptySources(event.sources);
   const newest = [...event.sources].sort((a, b) => b.publishedAt - a.publishedAt)[0];
   return (
-    <div className="pin-popup">
+    <div className="pin-popup" onClick={(e) => e.stopPropagation()}>
       <button className="close" onClick={onClose} aria-label="Close">✕</button>
       <h2>
         Reports of {event.event.toLowerCase()}
@@ -478,48 +445,22 @@ function spiderfyOffsets(count: number, radiusPx = 45): [number, number][] {
   return out;
 }
 
-function applySpiderfy() {
+function spiderfyAt(lng: number, lat: number, allEvents: EventFeature[]) {
   const map = window.__orbipinMap;
-  const state = (window as any).__orbiSpider;
-  if (!map || !state) return;
-  const src = map.getSource("events") as any;
-  if (!src || state.id === undefined || !src.getClusterLeaves) return;
-  src.getClusterLeaves(state.id, 100, 0, (err: any, leaves: any[]) => {
-    if (err || !leaves?.length) return;
-    const offsets = spiderfyOffsets(leaves.length, 45);
-    const degPerPx = 360 / (256 * Math.pow(2, map.getZoom()));
-    const spaced = leaves.map((leaf: any, i: number) => {
-      const [ox, oy] = offsets[i % offsets.length];
-      const c = leaf.geometry.coordinates;
-      return {
-        ...leaf,
-        geometry: { type: "Point", coordinates: [c[0] + ox * degPerPx, c[1] + oy * degPerPx] },
-      };
-    });
-    src.setData({ type: "FeatureCollection", features: spaced });
-  });
-}
-
-function clearSpiderfy() {
-  (window as any).__orbiSpider = null;
-}
-
-function spiderfyAtFrom(
-  lng: number,
-  lat: number,
-  eventsRef: { current: EventFeature[] },
-  map: maplibregl.Map
-) {
+  if (!map) return;
+  const spider = map.getSource("spider-pins") as maplibregl.GeoJSONSource;
+  if (!spider) return;
+  (window as any).__orbiSpiderActive = { lng, lat };
   const z = map.getZoom();
   const degPerPx = 360 / (256 * Math.pow(2, z));
   const radiusDeg = 35 * degPerPx;
-  const members = eventsRef.current.filter((ev) => {
+  const members = allEvents.filter((ev) => {
     if (ev.lng === undefined || ev.lat === undefined) return false;
     const dLng = (ev.lng - lng) * Math.cos(lat * Math.PI / 180);
     const dLat = ev.lat - lat;
     return Math.hypot(dLng, dLat) <= radiusDeg;
   });
-  if (members.length === 0) return;
+  if (members.length < 2) return;
   const offsets = spiderfyOffsets(members.length, 48);
   const spread = members.map((ev, i) => {
     const [ox, oy] = offsets[i];
@@ -534,7 +475,6 @@ function spiderfyAtFrom(
         sources: ev.sources.length,
         color: tierColor(ev.tier),
         highlight: ev.geoCode ?? "",
-        spider: true,
       },
       geometry: { type: "Point" as const, coordinates: [
         lng + ox * degPerPx,
@@ -542,26 +482,18 @@ function spiderfyAtFrom(
       ] },
     };
   });
-  const rest = eventsRef.current
-    .filter((ev) => !members.includes(ev))
-    .map((ev) => ({
-      type: "Feature" as const,
-      properties: {
-        id: ev._id,
-        event: ev.event,
-        tier: ev.tier,
-        place: ev.placeName,
-        quoted: ev.quotedPhrase,
-        sources: ev.sources.length,
-        color: tierColor(ev.tier),
-        highlight: ev.geoCode ?? "",
-      },
-      geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
-    }));
-  const geo = map.getSource("events") as maplibregl.GeoJSONSource;
-  geo.setData({ type: "FeatureCollection", features: [...spread, ...rest] as GeoJSON.Feature[] });
-  console.log("[OrbiPin] spiderfied " + members.length + " pins around " + lng.toFixed(1) + "," + lat.toFixed(1));
+  spider.setData({ type: "FeatureCollection", features: spread });
 }
+
+function clearSpiderfy() {
+  (window as any).__orbiSpiderActive = null;
+  const evs = (window as any).__orbiEvents?.current;
+  if (evs?.length) {
+    const z = window.__orbipinMap?.getZoom() ?? 6;
+    pushEventsToMap(spreadCoordinates(evs, 14, Math.max(z, 4)));
+  }
+}
+
 
 function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displayLat?: number })[]) {
   const map = (window as any).__orbipinMap as maplibregl.Map | null;
