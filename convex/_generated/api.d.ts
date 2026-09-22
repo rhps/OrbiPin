@@ -8,8 +8,16 @@
  * @module
  */
 
+import type * as crawl from "../crawl.js";
+import type * as crons from "../crons.js";
 import type * as events from "../events.js";
-import type * as ingest from "../ingest.js";
+import type * as extract from "../extract.js";
+import type * as geoLookup from "../geoLookup.js";
+import type * as mapData from "../mapData.js";
+import type * as repair from "../repair.js";
+import type * as reprocess from "../reprocess.js";
+import type * as rss from "../rss.js";
+import type * as sources from "../sources.js";
 import type * as verify from "../verify.js";
 
 import type {
@@ -19,8 +27,16 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  crawl: typeof crawl;
+  crons: typeof crons;
   events: typeof events;
-  ingest: typeof ingest;
+  extract: typeof extract;
+  geoLookup: typeof geoLookup;
+  mapData: typeof mapData;
+  repair: typeof repair;
+  reprocess: typeof reprocess;
+  rss: typeof rss;
+  sources: typeof sources;
   verify: typeof verify;
 }>;
 

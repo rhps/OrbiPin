@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 
 export const verifyProviders = internalAction({
   args: {},
-  handler: async (ctx) => {
+  handler: async () => {
     const results: Record<string, string> = {};
 
     // Firecrawl: single-page scrape of a stable, permissive page

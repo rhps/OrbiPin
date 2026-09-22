@@ -39,6 +39,22 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_clusterId", ["storyClusterId"]),
 
+  // spec 06: raw feed items pending extraction (the crawl staging area)
+  rawItems: defineTable({
+    url: v.string(),
+    title: v.string(),
+    publishedAt: v.number(),
+    sourceId: v.string(),
+    country: v.optional(v.string()), // extraction needs the country to resolve geo codes
+    stateMedia: v.optional(v.boolean()),
+    state: v.string(), // pending-extraction | ingested | skipped-not-significant | rejected-g1 | needs-geo-review | extraction-failed
+    seenAt: v.number(),
+    lastSeenAt: v.number(),
+    note: v.optional(v.string()),
+  })
+    .index("by_url", ["url"])
+    .index("by_state", ["state"]),
+
   // spec 05: region followers (AgentMail address IS the identity)
   followers: defineTable({
     address: v.string(),

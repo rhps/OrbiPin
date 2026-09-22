@@ -1,7 +1,6 @@
 // Events write/read path — G1–G5 gates live here.
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
-import type { Source } from "../src/types";
 
 export const upsertEvent = internalMutation({
   args: {
@@ -23,13 +22,6 @@ export const upsertEvent = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const newSource: Source = {
-      url: args.article.url,
-      publisher: args.article.publisher,
-      title: args.article.title,
-      publishedAt: args.article.publishedAt,
-    };
-
     // G3 dedup: find an existing open event matching cluster id, or same
     // geoCode + very similar event label within 48h.
     if (args.storyClusterId) {

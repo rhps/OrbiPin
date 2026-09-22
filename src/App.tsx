@@ -9,6 +9,7 @@ import { demoAreas } from "./demoAreas";
 import * as solar from "./lib/solar";
 import { registerAreaHighlight } from "./lib/areaHighlight";
 import { assertNonEmptySources } from "./types";
+import { createEventsStream } from "./lib/convexData";
 
 const BASE_STYLES = {
   nature: "https://tiles.openfreemap.org/styles/liberty",
@@ -33,8 +34,41 @@ export default function App() {
   const [projection, setProjection] = useState<"globe" | "mercator">("globe");
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<EventFeature | null>(null);
+  const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
+  const sourceRef = useRef<maplibregl.GeoJSONSource | null>(null);
+
+  // subscribe to live Convex data; fall back to demo until first payload
+  useEffect(() => {
+    const unsub = createEventsStream((events) => {
+      if (events.length === 0) return;
+      eventsRef.current = events;
+      setDataSource("convex");
+      const src = sourceRef.current;
+      if (src) {
+        src.setData({
+          type: "FeatureCollection",
+          features: events.map((ev, i) => ({
+            type: "Feature" as const,
+            id: i + 1,
+            properties: {
+              id: ev._id,
+              event: ev.event,
+              tier: ev.tier,
+              place: ev.placeName,
+              quoted: ev.quotedPhrase,
+              sources: ev.sources.length,
+              color: tierColor(ev.tier),
+              highlight: "geoCode" in ev && ev.geoCode ? ev.geoCode : "",
+            },
+            geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
+          })),
+        });
+      }
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -51,6 +85,10 @@ export default function App() {
         attributionControl: { compact: true },
       });
       mapRef.current = map;
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
+      mapRef.current.on("load", () => {
+        sourceRef.current = (map.getSource("events") as maplibregl.GeoJSONSource) ?? null;
+      });
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
 
       map.on("style.load", () => {
@@ -232,6 +270,9 @@ export default function App() {
           <div>Loading globe…</div>
         </div>
       )}
+      <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 10, fontSize: 11, color: "#8496b3" }}>
+        data: {dataSource} · events: {eventsRef.current.length}
+      </div>
       <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 6 }}>
         <HudButton onClick={toggleProjection}>
           {projection === "globe" ? "🗺 Flat" : "🌍 Globe"}
