@@ -10,6 +10,7 @@ import * as solar from "./lib/solar";
 import { registerAreaHighlight } from "./lib/areaHighlight";
 import { assertNonEmptySources } from "./types";
 import { createEventsStream } from "./lib/convexData";
+import FollowPanelLazy from "./FollowPanel";
 import { spreadCoordinates } from "./lib/pinSpread";
 
 const BASE_STYLES = {
@@ -42,6 +43,8 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<EventFeature | null>(null);
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
+  const [showFollow, setShowFollow] = useState(false);
+  const [followRegion, setFollowRegion] = useState<{ geoCode: string; label: string } | null>(null);
   const dbg = (_line: string) => { /* debug overlay removed per user request */ };
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
@@ -228,6 +231,15 @@ export default function App() {
 
         if (!hoverCleanup.current) hoverCleanup.current = registerAreaHighlight(map);
 
+        // spec 02/05: click an area polygon → subscribe box for that region
+        map.on("click", "area-fill", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+          const f = e.features?.[0];
+          if (!f) return;
+          const code = (f.properties as { code?: string }).code ?? "";
+          setFollowRegion({ geoCode: code, label: code });
+          setShowFollow(true);
+        });
+
         // terminator initial paint
         updateTerminator(map);
         const evSrc = map.getSource("events") as maplibregl.GeoJSONSource | undefined;
@@ -401,6 +413,13 @@ export default function App() {
           {mode === "nature" ? "🌑 Night" : "🌱 Nature"}
         </HudButton>
       </div>
+      {showFollow && (
+        <FollowPanelLazy
+          convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}
+          region={followRegion}
+          onClose={() => { setShowFollow(false); setFollowRegion(null); }}
+        />
+      )}
     </>
   );
 }
