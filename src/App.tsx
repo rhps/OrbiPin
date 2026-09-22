@@ -42,9 +42,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<EventFeature | null>(null);
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
-  const [debugLines, setDebugLines] = useState<string[]>([]);
-  const dbg = (line: string) =>
-    setDebugLines((prev) => [...prev.slice(-5), `${new Date().toISOString().slice(11, 19)} ${line}`]);
+  const dbg = (_line: string) => { /* debug overlay removed per user request */ };
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
   const sourceRef = useRef<maplibregl.GeoJSONSource | null>(null);
@@ -394,9 +392,6 @@ export default function App() {
       )}
       <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 10, fontSize: 11, color: "#8496b3", textAlign: "right" }}>
         data: {dataSource} · events: {eventsRef.current.length}
-      </div>
-      <div style={{ position: "absolute", bottom: 12, left: 12, zIndex: 10, fontSize: 11, color: "#8496b3", fontFamily: "monospace" }}>
-        {debugLines.map((l, i) => <div key={i}>{l}</div>)}
       </div>
       <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 6 }}>
         <HudButton onClick={toggleProjection}>

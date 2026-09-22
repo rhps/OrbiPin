@@ -15,6 +15,8 @@ import type * as events from "../events.js";
 import type * as extract from "../extract.js";
 import type * as followers from "../followers.js";
 import type * as geoLookup from "../geoLookup.js";
+import type * as http from "../http.js";
+import type * as inbound from "../inbound.js";
 import type * as mapData from "../mapData.js";
 import type * as places from "../places.js";
 import type * as repair from "../repair.js";
@@ -37,6 +39,8 @@ declare const fullApi: ApiFromModules<{
   extract: typeof extract;
   followers: typeof followers;
   geoLookup: typeof geoLookup;
+  http: typeof http;
+  inbound: typeof inbound;
   mapData: typeof mapData;
   places: typeof places;
   repair: typeof repair;

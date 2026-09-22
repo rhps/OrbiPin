@@ -15,6 +15,93 @@ interface ExtractedEvent {
   severity: number;
 }
 
+// Text-based extraction entry (used by RSS inlet and tests)
+export const extractFromText = internalAction({
+  args: {
+    text: v.string(),
+    sourceId: v.string(),
+    publishedAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const prompt = `You are a news event extractor for a map of world events.
+Given this news text from ${args.sourceId}:
+"""${args.text.slice(0, 1200)}"""
+
+Return STRICT JSON (no prose):
+{
+  "isSignificantWorldEvent": boolean,
+  "event": string,
+  "placeName": string,
+  "tier": "city"|"adm2"|"province"|"country",
+  "quotedPhrase": string,
+  "severity": number
+}
+Rules: tier = evidence level matching the text. quotedPhrase = verbatim substring.`;
+
+    let extracted: ExtractedEvent | null = null;
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0,
+          response_format: { type: "json_object" },
+          max_tokens: 200,
+        }),
+      });
+      const j: any = await res.json();
+      if (!res.ok) throw new Error(`OpenAI ${res.status}`);
+      extracted = JSON.parse(j.choices[0].message.content);
+    } catch (e: any) {
+      return { ok: false, stage: "extraction", error: e.message };
+    }
+
+    if (!extracted || extracted.isSignificantWorldEvent !== true) {
+      return { ok: true, stage: "skipped" };
+    }
+
+    // G1 verbatim check
+    if (!args.text.toLowerCase().includes(extracted.quotedPhrase.toLowerCase())) {
+      return { ok: false, stage: "G1", error: "quotedPhrase not verbatim" };
+    }
+
+    // G2 resolution
+    const place = resolvePlace(extracted.placeName);
+    const country = place ? null : resolveCountry(extracted.placeName);
+    if (!place && !country) {
+      return { ok: true, stage: "review-queue" };
+    }
+    const geoCode = place ? place.geoCode : country!.iso2;
+    const lng = place ? place.lng : country!.lng;
+    const lat = place ? place.lat : country!.lat;
+
+    await ctx.runMutation(internal.extract.ingestVerified, {
+      placeName: extracted.placeName,
+      tier: extracted.tier,
+      geoCode,
+      lng,
+      lat,
+      event: extracted.event,
+      quotedPhrase: extracted.quotedPhrase,
+      severity: extracted.severity,
+      article: {
+        url: args.sourceId,
+        publisher: args.sourceId,
+        title: extracted.event,
+        publishedAt: args.publishedAt,
+      },
+      stateMedia: false,
+    });
+
+    return { ok: true, stage: "ingested" };
+  },
+});
+
 export const extractAndIngest = internalAction({
   args: {
     rawItemId: v.id("rawItems"),
