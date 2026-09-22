@@ -231,6 +231,8 @@ export default function App() {
       });
 
       map.on("click", "event-clusters", (e: maplibregl.MapMouseEvent) => {
+        const pinHere = map.queryRenderedFeatures(e.point, { layers: ["event-pins"] })[0];
+        if (pinHere) return; // a real pin is on top — let its handler win
         const f = map.queryRenderedFeatures(e.point, { layers: ["event-clusters"] })[0];
         if (!f) return;
         const clusterId = (f.properties as { cluster_id?: number }).cluster_id;
@@ -283,6 +285,19 @@ export default function App() {
     }, 60_000);
     return () => clearInterval(t);
   }, []);
+
+  // re-spread stacked pins on zoom change so they never visually collapse
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const onZoom = () => {
+      if (dataSource !== "convex" || eventsRef.current.length === 0) return;
+      const z = map.getZoom();
+      pushEventsToMap(spreadCoordinates(eventsRef.current, 14, Math.max(z, 4)));
+    };
+    map.on("zoomend", onZoom);
+    return () => { map.off("zoomend", onZoom); };
+  }, [dataSource, ready]);
 
   const toggleProjection = () => {
     const next = projection === "globe" ? "mercator" : "globe";

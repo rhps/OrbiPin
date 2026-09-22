@@ -19,7 +19,7 @@ export function spreadCoordinates<T extends { lng?: number; lat?: number }>(
   // px→deg at given zoom, CAPPED so spread can never exceed ~0.12° (≈13km) —
   // guarantees pins never land outside their country even if zoom math is stale
   const degPerPx = Math.min(360 / (256 * Math.pow(2, zoom)), 360 / (256 * Math.pow(2, 8)));
-  const spreadDeg = Math.min(baseSpreadPx * degPerPx, 0.12);
+  const spreadDeg = Math.max(Math.min(baseSpreadPx * degPerPx, 0.12), 0.008);
 
   for (const [, group] of groups) {
     if (group.length === 1) {
