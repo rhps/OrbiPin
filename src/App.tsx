@@ -185,6 +185,8 @@ export default function App() {
               "circle-opacity": 0.9,
             },
           });
+        // ---- spec 06: cluster-count symbol layer (font stack verified against glyph server) ----
+        if (!map.getLayer("event-cluster-count")) {
           map.addLayer({
             id: "event-cluster-count",
             type: "symbol",
@@ -193,9 +195,11 @@ export default function App() {
             layout: {
               "text-field": ["get", "point_count_abbreviated"],
               "text-size": 12,
+              "text-font": ["Noto Sans Regular"], // verified 200 on openfreemap glyphs
             },
             paint: { "text-color": "#ffffff" },
           });
+        }
           map.addLayer({
             id: "event-pins",
             type: "circle",
@@ -225,9 +229,21 @@ export default function App() {
       map.on("click", "event-clusters", (e: maplibregl.MapMouseEvent) => {
         const f = map.queryRenderedFeatures(e.point, { layers: ["event-clusters"] })[0];
         if (!f) return;
+        const clusterId = (f.properties as { cluster_id?: number }).cluster_id;
         const lng = (f.geometry as GeoJSON.Point).coordinates[0];
         const lat = (f.geometry as GeoJSON.Point).coordinates[1];
-        map.easeTo({ center: [lng, lat], zoom: map.getZoom() + 2.5 });
+        const src = map.getSource("events") as maplibregl.GeoJSONSource & {
+          getClusterExpansionZoom: (id: number, cb: (err: any, zoom: number) => void) => void;
+        } | null;
+        if (!src || clusterId === undefined) {
+          map.easeTo({ center: [lng, lat], zoom: map.getZoom() + 2.5 });
+          return;
+        }
+        // expand exactly to the zoom where this cluster splits (spec 03)
+        src.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
+          if (err) return;
+          map.easeTo({ center: [lng, lat], zoom: Math.min(zoom + 0.3, 14.5) });
+        });
       });
       map.on("mouseenter", "event-clusters", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-clusters", () => { map.getCanvas().style.cursor = ""; });
