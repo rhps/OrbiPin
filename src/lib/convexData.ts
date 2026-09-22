@@ -25,7 +25,7 @@ export function createEventsStream(onData: (events: EventFeature[]) => void) {
       severity: f.properties.severity,
       lng: f.geometry.coordinates[0],
       lat: f.geometry.coordinates[1],
-      sources: [{ url: f.properties.latestUrl, publisher: f.properties.latestPublisher, title: f.properties.latestTitle, publishedAt: 0 }],
+      sources: [{ url: f.properties.latestUrl, publisher: f.properties.latestPublisher, title: f.properties.latestTitle, publishedAt: f.properties.latestPublishedAt || 0 }],
       lastSeenAt: f.properties.lastSeenAt,
       occurredAt: 0,
       sourceCount: f.properties.sourceCount,

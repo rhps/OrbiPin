@@ -469,7 +469,9 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
         <a href={newest.url} target="_blank" rel="noreferrer">
           {newest.publisher}
         </a>{" "}
-        · {new Date(newest.publishedAt).toISOString().slice(0, 16).replace("T", " ")} UTC
+        · {newest.publishedAt > 0
+            ? new Date(newest.publishedAt).toISOString().slice(0, 16).replace("T", " ") + " UTC"
+            : "date unknown"}
       </div>
     </div>
   );

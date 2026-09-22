@@ -34,6 +34,7 @@ export const activeEventsGeo = query({
           latestTitle: newest.title,
           latestPublisher: newest.publisher,
           latestUrl: newest.url,
+          latestPublishedAt: newest.publishedAt || 0,
         },
         geometry: { type: "Point", coordinates: [ev.lng, ev.lat] },
       });

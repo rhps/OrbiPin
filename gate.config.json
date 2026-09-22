@@ -1,0 +1,7 @@
+{
+  "g1_min_quoted_words": 3,
+  "g3_overlap_threshold": 0.5,
+  "g3_window_hours": 48,
+  "card_min_date": "2000-01-01",
+  "note": "spec 07 \u2014 any gate red blocks deploy"
+}

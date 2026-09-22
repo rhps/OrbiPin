@@ -123,10 +123,11 @@ Return STRICT JSON (no prose):
   "event": string,                      // 3-8 word hedged event label
   "placeName": string,                  // the MOST SPECIFIC place the headline names
   "tier": "city"|"adm2"|"province"|"country",  // must match what the headline actually names
-  "quotedPhrase": string,               // the exact substring of the headline containing the location
+  "quotedPhrase": string,               // the FULL sentence/clause containing the location, verbatim (not a fragment)
   "severity": number                    // 1-5
 }
 Rules: tier = evidence level (never more precise than the headline supports).
+quotedPhrase MUST be the complete clause mentioning the location — e.g. "floods inundated parts of Jakarta" not "in Jakarta".
 If the headline names no place at all, use country="${args.country}" tier="country".`;
     let extracted: ExtractedEvent | null = null;
     try {
@@ -316,16 +317,25 @@ export const ingestVerified = internalMutation({
     const dup = await ctx.db.query("articles").withIndex("by_url", (q) => q.eq("url", args.article.url)).first();
     if (dup) return { deduped: true };
 
-    // G3: cluster by normalized event label + geoCode (24h window)
+    // G3: cluster by word-overlap similarity + geoCode (48h window per spec 03).
+    // Exact-prefix matching never merged — outlets phrase the same story differently.
     const recent = await ctx.db
       .query("events")
       .withIndex("by_geoCode", (q) => q.eq("geoCode", args.geoCode))
       .filter((q) => q.eq(q.field("archived"), false))
       .collect();
-    const label = args.event.toLowerCase().slice(0, 24);
-    const match = recent.find(
-      (ev) => now - ev.lastSeenAt <= 24 * 3600_000 && ev.event.toLowerCase().slice(0, 24) === label
-    );
+    const words = (s: string) => new Set(s.toLowerCase().split(/\W+/).filter((w) => w.length > 3));
+    const newWords = words(args.event);
+    const overlap = (a: Set<string>, b: Set<string>) => {
+      if (a.size === 0 || b.size === 0) return 0;
+      let shared = 0;
+      for (const w of a) if (b.has(w)) shared++;
+      return shared / Math.min(a.size, b.size);
+    };
+    const match = recent.find((ev) => {
+      if (now - ev.lastSeenAt > 48 * 3600_000) return false;
+      return overlap(newWords, words(ev.event)) >= 0.5; // ≥50% word overlap
+    });
 
     const source = {
       url: args.article.url,
