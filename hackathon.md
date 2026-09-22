@@ -69,3 +69,29 @@ Verified live pass found two regressions; both fixed on `fix/epoch-zero-and-dedu
 Decision: existing 372 events keep their stored dates (now surfaced); new
 ingests benefit from the merge + prompt fixes. Convex features used:
 internal queries/actions, `withIndex` filters, GeoJSON query surface.
+
+### 2026-09-22 - hover-highlight areas + click-to-subscribe (spec 02 + 05)
+`feature/hover-areas-subscribe`: fixed the structurally-dead hover system and
+shipped real boundaries.
+1. **id contract fixed**: areas source now sets `promoteId: "code"` —
+   feature-state hover binds (verified live: `getFeatureState → {hover:true}`).
+   This was the root cause of dead hover (paint keyed on feature-state against
+   id-less features).
+2. **Real boundaries**: geoBoundaries ADM0 (CC-BY, attributed in the
+   attribution control) for MYS/GBR/IDN, simplified ~90% (radial-distance
+   decimation, 0.05° tolerance), served as per-country assets from
+   `public/areas/*.geojson` (43-389 KB each), lazy-loaded when a country's
+   centroid enters the viewport (`moveend`), merged into the areas source.
+3. **Hover**: mousemove on `area-fill` → `setFeatureState` hover → 0.28 fill
+   + outline glow + pointer cursor; neutral amber default for ALL countries
+   (wedge match colors kept).
+4. **Click → subscribe**: clicking an area opens the existing Follow panel
+   pre-filled with the polygon's `name` ("Follow Malaysia", verified live:
+   panelText = "Malaysia"). Writes to the same `followers` table + cadence +
+   reply-to-ask as the 📧 flow. Pins win over areas (verified: pin click does
+   NOT open the panel).
+5. **Style-swap survival**: after `setStyle`, areas source (2 features),
+   hover binding, and all layers survive — verified live.
+6. **Gate**: `gate` check validates every asset has code+name and the source
+   sets promoteId (PASS).
+Touch: click path works alone (no hover dependency); panel is width-fluid.

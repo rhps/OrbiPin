@@ -44,6 +44,13 @@ export default function App() {
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
   const [showFollow, setShowFollow] = useState(false);
   const [followRegion, setFollowRegion] = useState<{ geoCode: string; label: string } | null>(null);
+// countries with boundary assets shipped in public/areas/ (code, lon, lat centroid)
+const AREA_CODES: [string, number, number][] = [
+  ["MYS", 101.97, 4.21],
+  ["GBR", -1.17, 52.35],
+  ["IDN", 113.92, -0.79],
+];
+
   const dbg = (_line: string) => { /* debug overlay removed per user request */ };
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
@@ -87,7 +94,10 @@ export default function App() {
         style,
         center: [107.6, -6.9],
         zoom: 2.2,
-        attributionControl: { compact: true },
+        attributionControl: {
+          compact: true,
+          customAttribution: 'Areas: <a href="https://www.geoboundaries.org/">geoBoundaries</a> CC-BY',
+        },
       });
       mapRef.current = map;
       (window as any).__orbipinMap = map;
@@ -143,9 +153,47 @@ export default function App() {
           });
         }
         if (!map.getSource("areas")) {
-          // empty by default — demo polygons removed (user request). Real
-          // region polygons arrive with the geoBoundaries integration (spec 02).
-          map.addSource("areas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+          // spec 02: real geoBoundaries assets, promoteId so feature-state hover
+          // can bind (the id-less bug that killed hover before). Lazy-load
+          // per-country as it enters the viewport.
+          map.addSource("areas", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+            promoteId: "code",
+          });
+          const loaded = new Set<string>();
+          const loadAreas = () => {
+            const src2 = map.getSource("areas") as maplibregl.GeoJSONSource | undefined;
+            if (!src2) return;
+            const bounds = map.getBounds();
+            const inView = AREA_CODES.filter(
+              ([, lon, lat]) => !loaded.has(String(lon) + lat) && bounds.contains([lon, lat] as maplibregl.LngLatLike)
+            );
+            if (inView.length === 0) return;
+            inView.forEach(([, lon, lat]) => loaded.add(String(lon) + lat));
+            void Promise.all(
+              inView.map(([code]) =>
+                fetch(`${import.meta.env.BASE_URL}areas/${code}.geojson`)
+                  .then((r) => (r.ok ? r.json() : null))
+                  .catch(() => null)
+              )
+            ).then((jsons) => {
+              const feats = jsons.flatMap((j) => (j?.features ?? []).map((f: any) => ({
+                ...f,
+                id: f.properties?.code,
+              })));
+              if (feats.length > 0) {
+                void src2.getData().then((prev: any) => {
+                  src2.setData({
+                    type: "FeatureCollection",
+                    features: [...(prev.features ?? []), ...feats],
+                  });
+                });
+              }
+            });
+          };
+          loadAreas();
+          map.on("moveend", loadAreas);
         }
         // spiderfy source: non-clustered so spread pins NEVER re-group
         if (!map.getSource("spider-pins")) {
@@ -176,7 +224,7 @@ export default function App() {
             type: "fill",
             source: "areas",
             paint: {
-              "fill-color": ["match", ["get", "code"], "ID-JB", "#ffb020", "TLS", "#39d98a", "#ffffff"],
+              "fill-color": ["match", ["get", "code"], "TLS", "#39d98a", "#ffb020"],
               "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.28, 0],
               // lift effect: hovered region lifts via brighter fill + soft outline glow
               "fill-outline-color": ["case", ["boolean", ["feature-state", "hover"], false], "#ffffff", "rgba(255,255,255,0)"],
@@ -187,7 +235,7 @@ export default function App() {
             type: "line",
             source: "areas",
             paint: {
-              "line-color": ["match", ["get", "code"], "ID-JB", "#ffb020", "TLS", "#39d98a", "#ffffff"],
+              "line-color": ["match", ["get", "code"], "TLS", "#39d98a", "#ffb020"],
               "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 3, 1.4],
               // hidden by default — outline only shows on hover (lift effect)
               "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 1, 0],
@@ -196,26 +244,24 @@ export default function App() {
           });
         }
 
-        // country hover LIFT: direct mousemove on the fill layer (works for all
-        // areas incl. those without pins) + pointer cursor
-        map.on("mousemove", "area-fill", (e) => {
+        // country hover LIFT via feature-state (promoteId makes ids bind now)
+        let hoveredAreaId: string | number | null = null;
+        map.on("mousemove", "area-fill", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
           map.getCanvas().style.cursor = "pointer";
-          const f = (e as maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }).features?.[0];
-          if (f) {
-            const code = (f.properties as { code?: string }).code ?? "";
-            map.setPaintProperty("area-fill", "fill-opacity", [
-              "case",
-              ["==", ["get", "code"], code], 0.38,   // hovered region lifts brighter
-              ["boolean", ["feature-state", "hover"], false], 0.28,
-              0,
-            ]);
-          }
+          const f = e.features?.[0];
+          const id = f?.id;
+          if (id == null) return;
+          if (hoveredAreaId !== null && hoveredAreaId !== id)
+            map.setFeatureState({ source: "areas", id: hoveredAreaId }, { hover: false });
+          hoveredAreaId = id;
+          map.setFeatureState({ source: "areas", id }, { hover: true });
         });
         map.on("mouseleave", "area-fill", () => {
           map.getCanvas().style.cursor = "";
-          map.setPaintProperty("area-fill", "fill-opacity", [
-            "case", ["boolean", ["feature-state", "hover"], false], 0.28, 0,
-          ]);
+          if (hoveredAreaId !== null) {
+            map.setFeatureState({ source: "areas", id: hoveredAreaId }, { hover: false });
+            hoveredAreaId = null;
+          }
         });
         if (!map.getLayer("event-clusters")) {
           map.addLayer({
@@ -276,12 +322,17 @@ export default function App() {
 
         if (!hoverCleanup.current) hoverCleanup.current = registerAreaHighlight(map);
 
-        // spec 02/05: click an area polygon → subscribe box for that region
+        // spec 02/05: click an area polygon → subscribe box for that region.
+        // Pins win over areas (registered later = on top; also guard below).
         map.on("click", "area-fill", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+          const pinHit = map.queryRenderedFeatures(e.point, { layers: ["event-pins", "event-clusters", "spider-pins"] });
+          if (pinHit.length > 0) return; // pin wins — area is fallback target
           const f = e.features?.[0];
           if (!f) return;
-          const code = (f.properties as { code?: string }).code ?? "";
-          setFollowRegion({ geoCode: code, label: code });
+          const p = f.properties as { code?: string; name?: string };
+          const code = p.code ?? "";
+          if (!code) return;
+          setFollowRegion({ geoCode: code, label: p.name ?? code });
           setShowFollow(true);
         });
 
