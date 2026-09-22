@@ -10,6 +10,7 @@ import * as solar from "./lib/solar";
 import { registerAreaHighlight } from "./lib/areaHighlight";
 import { assertNonEmptySources } from "./types";
 import { createEventsStream } from "./lib/convexData";
+import FollowPanelLazy from "./FollowPanel";
 import { spreadCoordinates } from "./lib/pinSpread";
 
 const BASE_STYLES = {
@@ -42,6 +43,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<EventFeature | null>(null);
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
+  const [showFollow, setShowFollow] = useState(false);
   const dbg = (_line: string) => { /* debug overlay removed per user request */ };
   const eventsRef = useRef<EventFeature[]>(demoEvents);
   const hoverCleanup = useRef<(() => void) | null>(null);
@@ -265,13 +267,7 @@ export default function App() {
         spiderfyAt(lng, lat, eventsRef.current);
       });
 
-      // background click collapses spiderfy
-      map.on("click", (e: maplibregl.MapMouseEvent) => {
-        const hits = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins", "spider-pins"] });
-        if (hits.length === 0 && (window as any).__orbiSpiderActive) {
-          clearSpiderfy();
-        }
-      });
+      // (collapse handled by the unified background click below)
       map.on("mouseenter", "event-clusters", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-clusters", () => { map.getCanvas().style.cursor = ""; });
 
@@ -353,7 +349,7 @@ export default function App() {
       <div ref={containerRef} className="map-container" />
       {selected && <PinPopup event={selected} onClose={() => setSelected(null)} />}
       {!ready && (
-        <div className="pin-popup">
+        <div className="pin-popup" onClick={(e) => e.stopPropagation()}>
           <h2>OrbiPin</h2>
           <div>Loading globe…</div>
         </div>
@@ -368,7 +364,16 @@ export default function App() {
         <HudButton onClick={toggleMode}>
           {mode === "nature" ? "🌑 Night" : "🌱 Nature"}
         </HudButton>
+        <HudButton onClick={() => setShowFollow((v) => !v)}>
+          📧 Follow
+        </HudButton>
       </div>
+      {showFollow && (
+        <FollowPanelLazy
+          convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}
+          onClose={() => setShowFollow(false)}
+        />
+      )}
     </>
   );
 }
@@ -396,7 +401,7 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
   assertNonEmptySources(event.sources);
   const newest = [...event.sources].sort((a, b) => b.publishedAt - a.publishedAt)[0];
   return (
-    <div className="pin-popup">
+    <div className="pin-popup" onClick={(e) => e.stopPropagation()}>
       <button className="close" onClick={onClose} aria-label="Close">✕</button>
       <h2>
         Reports of {event.event.toLowerCase()}
@@ -432,6 +437,7 @@ function spiderfyAt(lng: number, lat: number, allEvents: EventFeature[]) {
   if (!map) return;
   const spider = map.getSource("spider-pins") as maplibregl.GeoJSONSource;
   if (!spider) return;
+  (window as any).__orbiSpiderActive = { lng, lat };
   const z = map.getZoom();
   const degPerPx = 360 / (256 * Math.pow(2, z));
   const radiusDeg = 35 * degPerPx;

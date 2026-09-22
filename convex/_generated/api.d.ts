@@ -13,6 +13,7 @@ import type * as crawl from "../crawl.js";
 import type * as crons from "../crons.js";
 import type * as events from "../events.js";
 import type * as extract from "../extract.js";
+import type * as followMutations from "../followMutations.js";
 import type * as followers from "../followers.js";
 import type * as geoLookup from "../geoLookup.js";
 import type * as http from "../http.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   events: typeof events;
   extract: typeof extract;
+  followMutations: typeof followMutations;
   followers: typeof followers;
   geoLookup: typeof geoLookup;
   http: typeof http;
