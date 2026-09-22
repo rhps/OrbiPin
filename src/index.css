@@ -1,0 +1,79 @@
+body {
+  margin: 0;
+  background: #060a12;
+  color: #dbe4f0;
+  font-family: system-ui, sans-serif;
+}
+
+#root {
+  position: absolute;
+  inset: 0;
+}
+
+/* full-bleed map */
+.map-container {
+  position: absolute;
+  inset: 0;
+}
+
+/* event info popup (replaces the old HUD box) */
+.pin-popup {
+  position: absolute;
+  z-index: 10;
+  bottom: 16px;
+  left: 16px;
+  max-width: 360px;
+  background: rgba(6, 10, 18, 0.92);
+  border: 1px solid #1d2b45;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.pin-popup h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: #a8c7ff;
+}
+
+.pin-popup .tier-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
+  margin-left: 6px;
+}
+
+.tier-city { color: #ff8080; border-color: #ff5c5c; }
+.tier-province { color: #ffcb66; border-color: #ffb020; }
+.tier-country { color: #6ee7b7; border-color: #39d98a; }
+
+.pin-popup .quoted {
+  margin-top: 8px;
+  color: #8496b3;
+  font-style: italic;
+}
+
+.pin-popup .sources {
+  margin-top: 6px;
+  color: #8496b3;
+}
+
+.pin-popup a {
+  color: #7fb4ff;
+}
+
+.pin-popup .close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  cursor: pointer;
+  color: #8496b3;
+  background: none;
+  border: none;
+  font-size: 16px;
+}
