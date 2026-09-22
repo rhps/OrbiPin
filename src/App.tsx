@@ -280,9 +280,11 @@ export default function App() {
       });
       map.on("mouseenter", "event-pins", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-pins", () => { map.getCanvas().style.cursor = ""; });
+      // background click (nothing hit) collapses spiderfy — registered last so
+      // layer-specific handlers run first; maplibre stops propagation per-layer.
       map.on("click", (e: maplibregl.MapMouseEvent) => {
         const feats = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins", "spider-pins"] });
-        if (feats.length === 0 && (window as any).__orbiSpiderActive) { clearSpiderfy(); }
+        if (feats.length === 0) { clearSpiderfy(); }
       });
 
       // spiderfied pins: select on click (opens popup, no collapse)
@@ -475,7 +477,10 @@ function spiderfyAt(lng: number, lat: number, allEvents: EventFeature[]) {
 function clearSpiderfy() {
   (window as any).__orbiSpiderActive = null;
   const evs = (window as any).__orbiEvents?.current;
-  if (evs?.length) pushEventsToMap(evs);
+  if (evs?.length) {
+    const z = window.__orbipinMap?.getZoom() ?? 6;
+    pushEventsToMap(spreadCoordinates(evs, 14, Math.max(z, 4)));
+  }
 }
 
 
