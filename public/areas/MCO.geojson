@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"code": "MCO", "name": "Monaco", "tier": "country"}, "geometry": {"type": "Polygon", "coordinates": [[[7.4090279, 43.7295783], [7.4320852, 43.7364127], [7.4090279, 43.7295783]]]}}]}

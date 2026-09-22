@@ -95,3 +95,13 @@ shipped real boundaries.
 6. **Gate**: `gate` check validates every asset has code+name and the source
    sets promoteId (PASS).
 Touch: click path works alone (no hover dependency); panel is width-fluid.
+
+### 2026-09-22 - world coverage: 231 country hover areas
+Extended from 3 to 231 countries (all geoBoundaries ADM0). Adaptive
+simplification per country span (0.02° small → 0.3° Canada/Russia), 7 MB
+total across per-country assets, median 16 KB. `manifest.json` (code,
+centroid, bytes) drives lazy loading: 12 unseen countries per `moveend`,
+burst-limited; dedup on merge. Chrome-verified live: 24 areas after boot,
+36 after panning to Europe, 48 after South America; hover binds (Ecuador
+→ {hover:true}); click opens panel pre-filled "Brazil". geoBoundaries
+CC-BY attribution retained.

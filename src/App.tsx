@@ -44,12 +44,10 @@ export default function App() {
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
   const [showFollow, setShowFollow] = useState(false);
   const [followRegion, setFollowRegion] = useState<{ geoCode: string; label: string } | null>(null);
-// countries with boundary assets shipped in public/areas/ (code, lon, lat centroid)
-const AREA_CODES: [string, number, number][] = [
-  ["MYS", 101.97, 4.21],
-  ["GBR", -1.17, 52.35],
-  ["IDN", 113.92, -0.79],
-];
+// world coverage: country manifest (code, lon, lat, bytes) fetched at boot —
+// 231 geoBoundaries ADM0 assets in public/areas/, lazy-loaded per viewport
+type AreaEntry = [string, number, number, number];
+let AREA_MANIFEST: AreaEntry[] | null = null;
 
   const dbg = (_line: string) => { /* debug overlay removed per user request */ };
   const eventsRef = useRef<EventFeature[]>(demoEvents);
@@ -164,13 +162,15 @@ const AREA_CODES: [string, number, number][] = [
           const loaded = new Set<string>();
           const loadAreas = () => {
             const src2 = map.getSource("areas") as maplibregl.GeoJSONSource | undefined;
-            if (!src2) return;
+            if (!src2 || !AREA_MANIFEST) return;
             const bounds = map.getBounds();
-            const inView = AREA_CODES.filter(
-              ([, lon, lat]) => !loaded.has(String(lon) + lat) && bounds.contains([lon, lat] as maplibregl.LngLatLike)
-            );
+            // fetch up to 12 unseen countries per moveend (burst-limited)
+            const inView = AREA_MANIFEST.filter(
+              ([code, lon, lat]) =>
+                !loaded.has(code) && bounds.contains([lon, lat] as maplibregl.LngLatLike)
+            ).slice(0, 12);
             if (inView.length === 0) return;
-            inView.forEach(([, lon, lat]) => loaded.add(String(lon) + lat));
+            inView.forEach(([code]) => loaded.add(code));
             void Promise.all(
               inView.map(([code]) =>
                 fetch(`${import.meta.env.BASE_URL}areas/${code}.geojson`)
@@ -184,15 +184,23 @@ const AREA_CODES: [string, number, number][] = [
               })));
               if (feats.length > 0) {
                 void src2.getData().then((prev: any) => {
+                  const seen = new Set((prev.features ?? []).map((f: any) => f.id));
                   src2.setData({
                     type: "FeatureCollection",
-                    features: [...(prev.features ?? []), ...feats],
+                    features: [...(prev.features ?? []), ...feats.filter((f: any) => !seen.has(f.id))],
                   });
                 });
               }
             });
           };
-          loadAreas();
+          const bootAreas = fetch(`${import.meta.env.BASE_URL}areas/manifest.json`)
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+            .then((m) => {
+              if (Array.isArray(m)) AREA_MANIFEST = m;
+              loadAreas();
+            });
+          void bootAreas;
           map.on("moveend", loadAreas);
         }
         // spiderfy source: non-clustered so spread pins NEVER re-group

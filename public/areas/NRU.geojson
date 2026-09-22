@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"code": "NRU", "name": "Nauru", "tier": "country"}, "geometry": {"type": "Polygon", "coordinates": [[[166.9099076, -0.5377351], [166.9260638, -0.5541294], [166.945794, -0.5481742], [166.9588728, -0.5200444], [166.9472402, -0.5037341], [166.9126593, -0.522935], [166.9099076, -0.5377351]]]}}]}

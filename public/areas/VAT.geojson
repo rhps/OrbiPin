@@ -1,0 +1,1 @@
+{"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"code": "VAT", "name": "Vatican City", "tier": "country"}, "geometry": {"type": "Polygon", "coordinates": [[[12.455497093889619, 41.907462156013764], [12.455497093889619, 41.907462156013764]]]}}]}
