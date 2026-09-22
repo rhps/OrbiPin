@@ -11,6 +11,7 @@ import { assertNonEmptySources } from "./types";
 import { createEventsStream } from "./lib/convexData";
 import FollowPanelLazy from "./FollowPanel";
 import { categoryOf } from "./lib/categories";
+import { detectRegion } from "./lib/tzRegions";
 import { Mail } from "lucide-react";
 import { Search as SearchIcon } from "lucide-react";
 import SearchPanelLazy from "./SearchPanel";
@@ -47,6 +48,14 @@ export default function App() {
   const [showSearch, setShowSearch] = useState(false);
   const [queryActive, setQueryActive] = useState(false);
   const [aboutRegion, setAboutRegion] = useState<{ geoCode: string; name: string } | null>(null);
+  const [regionToast, setRegionToast] = useState<{ geoCode: string; label: string } | null>(null);
+  useEffect(() => {
+    // Feature C: timezone→region guess, asked ONCE per browser (privacy: tz string only)
+    const pref = localStorage.getItem("orbipin:region-pref");
+    if (pref) return;
+    const guess = detectRegion();
+    if (guess) setRegionToast(guess);
+  }, []);
 
   const lastPullRef = useRef<number>(Date.now());
   useEffect(() => {
@@ -81,6 +90,8 @@ export default function App() {
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
   const [showFollow, setShowFollow] = useState(false);
   const [followRegion, setFollowRegion] = useState<{ geoCode: string; label: string } | null>(null);
+const iso2to3: Record<string, string> = { ID: "IDN", SG: "SGP", MY: "MYS", TH: "THA", PH: "PHL", VN: "VNM", GB: "GBR", FR: "FRA", DE: "DEU", ES: "ESP", IT: "ITA", NL: "NLD", BE: "BEL", PL: "POL", SE: "SWE", NO: "NOR", PT: "PRT", CH: "CHE", GR: "GRC", US: "USA", BR: "BRA", AR: "ARG", MX: "MEX", CA: "CAN", JP: "JPN", KR: "KOR", CN: "CHN", HK: "HKG", TW: "TWN", IN: "IND", AU: "AUS", ZA: "ZAF", EG: "EGY", KE: "KEN" };
+
 // world coverage: country manifest [{code, bbox, bytes}] fetched at boot —
 // 231 geoBoundaries ADM0 assets, lazy-loaded when a country's BBOX overlaps
 // the viewport (centroid test missed countries whose center sat off-view)
@@ -666,6 +677,39 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
           setQueryActive(false);
         }}
       />
+      {regionToast && (
+        <div className="region-toast glass" role="dialog" aria-label="Region suggestion">
+          <span className="msg">
+            Looking for news near you?
+            <span className="hint" title="We guess your region from your device timezone only — no location tracking, no IP lookup.">
+              how this works: your timezone, nothing else
+            </span>
+          </span>
+          <button
+            onClick={() => {
+              localStorage.setItem("orbipin:region-pref", "accepted");
+              setFollowRegion({ geoCode: regionToast.geoCode, label: regionToast.label });
+              setShowFollow(true);
+              // amber flash on the region polygon (~2s) so the user sees what they get
+              const map = window.__orbipinMap;
+              if (map && map.getLayer("area-fill")) {
+                const iso3 = iso2to3[regionToast.geoCode] ?? regionToast.geoCode;
+                map.setFeatureState({ source: "areas", id: iso3 }, { hover: true });
+                window.setTimeout(() => map.setFeatureState({ source: "areas", id: iso3 }, { hover: false }), 2000);
+              }
+              setRegionToast(null);
+            }}
+          >
+            Follow {regionToast.label}
+          </button>
+          <button
+            className="dismiss"
+            onClick={() => { localStorage.setItem("orbipin:region-pref", "dismissed"); setRegionToast(null); }}
+          >
+            No thanks
+          </button>
+        </div>
+      )}
       {aboutRegion && (
         <TransparencyPanelLazy
           convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}

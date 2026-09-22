@@ -204,3 +204,13 @@ intact ✓.
    crime 8%, transport 7%, military 5%. Sanity band met (other ≤25%).
 4. Live iconId mix matches; conflict+military restrained (no halo, dimmed).
    Gate `scripts/gate-icons.mjs` PASS (14 icons shipped, conflict restrained).
+
+### 2026-09-22 - "Your region" auto-detect (Feature C)
+`feature/region-detect`: auth-free personalization. Timezone → region via a
+static ~50-entry table (tzRegions.ts) — privacy: timezone string only, no IP
+lookup, no geolocation prompt, no third-party API; the toast says so ("your
+timezone, nothing else"). First visit only (localStorage orbipin:region-pref:
+accepted|dismissed — never asks twice). Accept → Follow panel pre-filled +
+2s amber flash on the region polygon (ISO2→ISO3 mapped for feature-state).
+Unmapped zones show nothing (default-off). Chrome-verified live:
+Europe/London → "Follow the UK" toast → panel opens, pref saved, toast gone.
