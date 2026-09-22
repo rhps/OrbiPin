@@ -553,9 +553,30 @@ function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displa
   const map = (window as any).__orbipinMap as maplibregl.Map | null;
   const src = map?.getSource("events") as maplibregl.GeoJSONSource | null;
   if (!map || !src) return;
+
+  // G3 single-pin grouping: same-place events merge into ONE visible pin;
+  // the newest article's title becomes the pin's story. Duplicates are tracked
+  // in hiddenByGroup so spiderfy/expand can reveal them later.
+  const visible: typeof events = [];
+  const hiddenByGroup: { key: string; items: typeof events }[] = [];
+  const groups = new Map<string, typeof events>();
+  for (const ev of events) {
+    const key = `${ev.tier}|${(ev.quotedPhrase || ev.event).slice(0, 24).toLowerCase()}`;
+    const g = groups.get(key);
+    if (g) g.push(ev);
+    else groups.set(key, [ev]);
+  }
+  for (const [, group] of groups) {
+    // newest first
+    group.sort((a, b) => (b.sources[0]?.publishedAt ?? 0) - (a.sources[0]?.publishedAt ?? 0));
+    visible.push(group[0]);
+    if (group.length > 1) hiddenByGroup.push({ key: group[0]._id, items: group.slice(1) });
+  }
+  (window as any).__orbiHiddenByGroup = hiddenByGroup;
+
   const fc: GeoJSON.FeatureCollection = {
     type: "FeatureCollection",
-    features: events.map((ev, i) => ({
+    features: visible.map((ev, i) => ({
       type: "Feature" as const,
       id: i + 1,
       properties: {
