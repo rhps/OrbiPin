@@ -159,3 +159,15 @@ CC-BY attribution retained.
 8. **A11y/motion**: prefers-reduced-motion kills pulse/slide/shimmer;
    :focus-visible 2px accent rings; touch targets ≥36-44px.
 Bundle: 1261 KB JS (fonts/icons CSS-side; within budget).
+
+### 2026-09-22 - branded splash (hourglass)
+`feature/branded-splash`: full-viewport splash in index.html (paints before
+any JS bundle): OrbiPin wordmark (Inter/system display), tagline "Every
+event, a pin on the planet.", self-hosted Twemoji ⏳ 23f3.png rocking
+±12° @1.6s with opacity breathe. Space-navy bg (#060a12) — no white flash;
+100dvh reserved, no layout shift. Dismissed on FIRST map load only (single-
+use flag — style swaps never resurrect it), 300ms fade then remove().
+10s fallback: quiet "Still trying… check your connection" + Retry
+(reload). Reduced-motion: no rocking, static icon. Chrome-verified live:
+splash removed after load ✓, stays gone across style swap ✓, layers
+intact ✓.

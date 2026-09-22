@@ -90,7 +90,8 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
       }
       if (cancelled) return;
       try {
-        const map = new maplibregl.Map({
+        splashFallback();
+      const map = new maplibregl.Map({
         container: containerRef.current!,
         style,
         center: [107.6, -6.9],
@@ -421,6 +422,7 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
           dbg(`events source has ${d?.features?.length ?? "?"} features`);
         });
         setReady(true);
+        dismissSplash();
       });
 
       map.on("click", "event-clusters", (e: maplibregl.MapMouseEvent) => {
@@ -530,13 +532,8 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
     <>
       <div ref={containerRef} className="map-container" />
       {selected && <PinPopup event={selected} onClose={() => setSelected(null)} />}
-      {!ready && (
-        <div className="splash">
-          <div className="mark">📍</div>
-          <div style={{ fontWeight: 600 }}>Loading globe…</div>
-          <div className="spinner" />
-        </div>
-      )}
+      {/* splash lives in index.html (instant paint); here we only dismiss it
+          on the FIRST load — never on style swaps — with 10s fallback error */}
       {ready && (
         <div className="status-bar glass">
           <span className="live-dot" aria-label="live" />
@@ -758,4 +755,30 @@ function updateTerminator(map: maplibregl.Map) {
     features: [solar.nightPolygon(solar.sunSubpoint(new Date()))] as unknown as GeoJSON.Feature[],
   };
   src.setData(fc);
+}// branded splash (index.html #orbipin-splash): fade + remove on first map
+// load; 10s quiet error with retry; single-use.
+let splashDismissed = false;
+function dismissSplash() {
+  if (splashDismissed) return;
+  const el = document.getElementById("orbipin-splash");
+  if (!el) { splashDismissed = true; return; }
+  splashDismissed = true;
+  el.classList.add("out");
+  window.setTimeout(() => el.remove(), 350);
 }
+function splashFallback() {
+  window.setTimeout(() => {
+    if (splashDismissed) return;
+    const el = document.getElementById("orbipin-splash");
+    if (!el) return;
+    if (el.querySelector(".spl-error")) return;
+    const div = document.createElement("div");
+    div.className = "spl-error";
+    div.innerHTML = 'Still trying… check your connection <button>Retry</button>';
+    const btn = div.querySelector("button");
+    if (btn) btn.onclick = () => { window.location.reload(); };
+    el.appendChild(div);
+  }, 10_000);
+}
+
+
