@@ -1,42 +1,41 @@
 // Spec 05: Habit Loop UI — follow a region, manage follows, cadence control.
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface FollowPanelProps {
   convexUrl: string;
+  region?: { geoCode: string; label: string } | null;
   onClose: () => void;
 }
 
-export default function FollowPanel({ convexUrl, onClose }: FollowPanelProps) {
+export default function FollowPanel({ convexUrl, region, onClose }: FollowPanelProps) {
   const [email, setEmail] = useState("");
   const [cadence, setCadence] = useState<"instant" | "daily" | "weekly">("daily");
   const [status, setStatus] = useState<string>("");
   const [myFollows, setMyFollows] = useState<any[]>([]);
 
+  useEffect(() => {
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setMyFollows([]); return; }
+    fetch(`${convexUrl}/api/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: "followMutations:listMyFollows",
+        args: { address: email },
+        format: "json",
+      }),
+    })
+      .then((r) => r.json())
+      .then((j) => setMyFollows(j.value ?? []))
+      .catch(() => setMyFollows([]))
 
-  const loadMine = async () => {
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
-    try {
-      const res = await fetch(`${convexUrl}/api/query`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path: "followMutations:listMyFollows",
-          args: { address: email },
-          format: "json",
-        }),
-      });
-      const j = await res.json();
-      setMyFollows(j.value ?? []);
-    } catch {
-      setStatus("Failed to load follows");
-    }
-  };
+  }, [email, convexUrl]);
 
-  const follow = async (geoCode: string, tier: string, label: string) => {
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      setStatus("Enter a valid email first");
-      return;
-    }
+  const target = region?.geoCode ?? "";
+  const targetLabel = region?.label ?? target;
+
+  const follow = async () => {
+    if (!target) { setStatus("No region selected"); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setStatus("Enter a valid email first"); return; }
     setStatus("Subscribing…");
     try {
       const res = await fetch(`${convexUrl}/api/mutation`, {
@@ -46,8 +45,8 @@ export default function FollowPanel({ convexUrl, onClose }: FollowPanelProps) {
           path: "followMutations:followRegion",
           args: {
             address: email,
-            tier,
-            geoCode,
+            tier: "country",
+            geoCode: target,
             cadence,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           },
@@ -55,8 +54,7 @@ export default function FollowPanel({ convexUrl, onClose }: FollowPanelProps) {
         }),
       });
       const j = await res.json();
-      setStatus(j.success ? `✅ Following ${label}` : `❌ ${j.errorMessage ?? "failed"}`);
-      void loadMine();
+      setStatus(j.success ? `✅ Following ${targetLabel}` : `❌ ${j.errorMessage ?? "failed"}`);
     } catch {
       setStatus("❌ Network error");
     }
@@ -74,7 +72,8 @@ export default function FollowPanel({ convexUrl, onClose }: FollowPanelProps) {
         }),
       });
       setStatus(`Unfollowed ${geoCode}`);
-      void loadMine();
+      const i = myFollows.findIndex((f: any) => f.geoCode === geoCode);
+      if (i >= 0) setMyFollows(myFollows.filter((_, idx) => idx !== i));
     } catch {
       setStatus("❌ Network error");
     }
@@ -84,6 +83,11 @@ export default function FollowPanel({ convexUrl, onClose }: FollowPanelProps) {
     <div className="pin-popup follow-panel" onClick={(e) => e.stopPropagation()}>
       <button className="close" onClick={onClose} aria-label="Close">✕</button>
       <h2>Follow your region</h2>
+      {region && (
+        <div style={{ margin: "4px 0 10px", fontSize: 13 }}>
+          Region: <b>{targetLabel}</b> {region.geoCode && <code style={{ color: "#a8c7ff" }}>({region.geoCode})</code>}
+        </div>
+      )}
       <div style={{ margin: "8px 0" }}>
         <input
           type="email"
@@ -97,16 +101,32 @@ export default function FollowPanel({ convexUrl, onClose }: FollowPanelProps) {
           }}
         />
       </div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-        <HudOption active={cadence === "instant"} onClick={() => setCadence("instant")}>⚡ Instant</HudOption>
-        <HudOption active={cadence === "daily"} onClick={() => setCadence("daily")}>📅 Daily</HudOption>
-        <HudOption active={cadence === "weekly"} onClick={() => setCadence("weekly")}>🗓 Weekly</HudOption>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+        {(["instant", "daily", "weekly"] as const).map((c) => (
+          <button
+            key={c}
+            onClick={() => setCadence(c)}
+            style={{
+              flex: 1, padding: "5px 0", borderRadius: 8, fontSize: 11,
+              border: `1px solid ${cadence === c ? "#7fb4ff" : "#2b3f63"}`,
+              background: cadence === c ? "#16324f" : "#101b2e",
+              color: cadence === c ? "#a8c7ff" : "#8496b3",
+              cursor: "pointer",
+            }}
+          >
+            {c === "instant" ? "⚡ Instant" : c === "daily" ? "📅 Daily" : "🗓 Weekly"}
+          </button>
+        ))}
       </div>
       <button
-        onClick={() => follow("SG", "country", "Singapore")}
-        className="follow-btn"
+        onClick={follow}
+        style={{
+          width: "100%", padding: "8px 0", borderRadius: 8,
+          border: "1px solid #39d98a", background: "#0e2b1e", color: "#6ee7b7",
+          cursor: "pointer", fontSize: 13, fontWeight: 600,
+        }}
       >
-        📌 Follow this region
+        📌 Subscribe to {targetLabel || "this region"}
       </button>
       {status && <div style={{ marginTop: 8, fontSize: 12 }}>{status}</div>}
 
@@ -133,20 +153,3 @@ const unfollowBtn: React.CSSProperties = {
   background: "none", border: "none", color: "#ff8080",
   cursor: "pointer", fontSize: 11, textDecoration: "underline",
 };
-
-function HudOption({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        flex: 1, padding: "5px 0", borderRadius: 8, fontSize: 11,
-        border: `1px solid ${active ? "#7fb4ff" : "#2b3f63"}`,
-        background: active ? "#16324f" : "#101b2e",
-        color: active ? "#a8c7ff" : "#8496b3",
-        cursor: "pointer",
-      }}
-    >
-      {children}
-    </button>
-  );
-}
