@@ -45,27 +45,7 @@ export default function App() {
       if (events.length === 0) return;
       eventsRef.current = events;
       setDataSource("convex");
-      const src = sourceRef.current;
-      if (src) {
-        src.setData({
-          type: "FeatureCollection",
-          features: events.map((ev, i) => ({
-            type: "Feature" as const,
-            id: i + 1,
-            properties: {
-              id: ev._id,
-              event: ev.event,
-              tier: ev.tier,
-              place: ev.placeName,
-              quoted: ev.quotedPhrase,
-              sources: ev.sources.length,
-              color: tierColor(ev.tier),
-              highlight: "geoCode" in ev && ev.geoCode ? ev.geoCode : "",
-            },
-            geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
-          })),
-        });
-      }
+      pushEventsToMap(events);
     });
     return unsub;
   }, []);
@@ -85,11 +65,14 @@ export default function App() {
         attributionControl: { compact: true },
       });
       mapRef.current = map;
+      (window as any).__orbipinMap = map;
       map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
       mapRef.current.on("load", () => {
         sourceRef.current = (map.getSource("events") as maplibregl.GeoJSONSource) ?? null;
+        if (sourceRef.current && eventsRef.current.length > 0) {
+          pushEventsToMap(eventsRef.current);
+        }
       });
-      map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), "top-right");
 
       map.on("style.load", () => {
         map.setProjection(GLOBE); // re-assert after any style transition
@@ -327,6 +310,31 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
       </div>
     </div>
   );
+}
+
+function pushEventsToMap(events: EventFeature[]) {
+  const map = (window as any).__orbipinMap as maplibregl.Map | null;
+  const src = map?.getSource("events") as maplibregl.GeoJSONSource | null;
+  if (!map || !src) return;
+  const fc: GeoJSON.FeatureCollection = {
+    type: "FeatureCollection",
+    features: events.map((ev, i) => ({
+      type: "Feature" as const,
+      id: i + 1,
+      properties: {
+        id: ev._id,
+        event: ev.event,
+        tier: ev.tier,
+        place: ev.placeName,
+        quoted: ev.quotedPhrase,
+        sources: ev.sources.length,
+        color: tierColor(ev.tier),
+        highlight: "geoCode" in ev && ev.geoCode ? ev.geoCode : "",
+      },
+      geometry: { type: "Point" as const, coordinates: [ev.lng ?? 0, ev.lat ?? 0] },
+    })),
+  };
+  src.setData(fc);
 }
 
 function tierColor(tier: string): string {
