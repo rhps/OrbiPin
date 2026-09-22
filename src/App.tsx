@@ -541,7 +541,7 @@ function spiderfyAtFrom(
     }));
   const geo = map.getSource("events") as maplibregl.GeoJSONSource;
   geo.setData({ type: "FeatureCollection", features: [...spread, ...rest] as GeoJSON.Feature[] });
-  console.log("[OrbiPin] spiderfied " + members.length + " pins around " + lng.toFixed(1) + "," + lat.toFixed(1));
+  // spiderfy applied (no console output)
 }
 
 function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displayLat?: number })[]) {
