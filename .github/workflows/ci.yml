@@ -1,0 +1,22 @@
+name: CI + Preview Deploy
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck (G5 audit)
+        run: npx tsc --noEmit
+      - name: Preview deploy (throwaway — never touches prod)
+        run: npx convex deploy --preview-name pr-${{ github.event.number }}
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
