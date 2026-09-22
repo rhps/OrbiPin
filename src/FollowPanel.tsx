@@ -79,10 +79,14 @@ export default function FollowPanel({ convexUrl, region, onClose }: FollowPanelP
     }
   };
 
+  const alreadyFollowing = myFollows.some((f: any) => f.geoCode === target);
+
   return (
-    <div className="pin-popup follow-panel" onClick={(e) => e.stopPropagation()}>
+    <div className="follow-panel-v2 glass" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Follow a region">
       <button className="close" onClick={onClose} aria-label="Close">✕</button>
-      <h2>Follow your region</h2>
+      <h2 style={{ margin: "0 0 6px", fontSize: 15, color: "var(--accent)", fontWeight: 700 }}>
+        {alreadyFollowing ? `Following ${targetLabel} ✓` : `Follow ${targetLabel}`}
+      </h2>
       {region && (
         <div style={{ margin: "4px 0 10px", fontSize: 13 }}>
           Region: <b>{targetLabel}</b> {region.geoCode && <code style={{ color: "#a8c7ff" }}>({region.geoCode})</code>}
@@ -94,39 +98,22 @@ export default function FollowPanel({ convexUrl, region, onClose }: FollowPanelP
           placeholder="you@example.com"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={{
-            width: "100%", padding: "6px 10px", borderRadius: 8,
-            border: "1px solid #2b3f63", background: "#101b2e", color: "#dbe4f0",
-            fontSize: 13, boxSizing: "border-box",
-          }}
         />
       </div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+      <div className="segmented" style={{ width: "100%", marginBottom: 10 }} role="group" aria-label="Cadence">
         {(["instant", "daily", "weekly"] as const).map((c) => (
           <button
             key={c}
+            className={cadence === c ? "on" : ""}
             onClick={() => setCadence(c)}
-            style={{
-              flex: 1, padding: "5px 0", borderRadius: 8, fontSize: 11,
-              border: `1px solid ${cadence === c ? "#7fb4ff" : "#2b3f63"}`,
-              background: cadence === c ? "#16324f" : "#101b2e",
-              color: cadence === c ? "#a8c7ff" : "#8496b3",
-              cursor: "pointer",
-            }}
+            style={{ flex: 1 }}
           >
-            {c === "instant" ? "⚡ Instant" : c === "daily" ? "📅 Daily" : "🗓 Weekly"}
+            {c === "instant" ? "Instant" : c === "daily" ? "Daily" : "Weekly"}
           </button>
         ))}
       </div>
-      <button
-        onClick={follow}
-        style={{
-          width: "100%", padding: "8px 0", borderRadius: 8,
-          border: "1px solid #39d98a", background: "#0e2b1e", color: "#6ee7b7",
-          cursor: "pointer", fontSize: 13, fontWeight: 600,
-        }}
-      >
-        📌 Subscribe to {targetLabel || "this region"}
+      <button className="follow-story-btn" onClick={follow}>
+        Subscribe to {targetLabel || "this region"}
       </button>
       {status && <div style={{ marginTop: 8, fontSize: 12 }}>{status}</div>}
 

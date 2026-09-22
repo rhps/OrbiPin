@@ -11,6 +11,7 @@ import { assertNonEmptySources } from "./types";
 import { createEventsStream } from "./lib/convexData";
 import FollowPanelLazy from "./FollowPanel";
 import { categoryOf } from "./lib/categories";
+import { Mail } from "lucide-react";
 import { spreadCoordinates } from "./lib/pinSpread";
 
 const BASE_STYLES = {
@@ -40,6 +41,7 @@ export default function App() {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const [mode, setMode] = useState<Mode>("nature");
   const [projection, setProjection] = useState<"globe" | "mercator">("globe");
+  const lastPullRef = useRef<number>(Date.now());
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState<EventFeature | null>(null);
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
@@ -529,24 +531,36 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
       <div ref={containerRef} className="map-container" />
       {selected && <PinPopup event={selected} onClose={() => setSelected(null)} />}
       {!ready && (
-        <div className="pin-popup" onClick={(e) => e.stopPropagation()}>
-          <h2>OrbiPin</h2>
-          <div>Loading globe…</div>
+        <div className="splash">
+          <div className="mark">📍</div>
+          <div style={{ fontWeight: 600 }}>Loading globe…</div>
+          <div className="spinner" />
         </div>
       )}
-      <div style={{ position: "absolute", bottom: 12, right: 12, zIndex: 10, fontSize: 11, color: "#8496b3", textAlign: "right" }}>
-        data: {dataSource} · events: {eventsRef.current.length}
-      </div>
-      <div style={{ position: "absolute", top: 12, right: 12, zIndex: 10, display: "flex", gap: 6 }}>
-        <HudButton onClick={toggleProjection}>
-          {projection === "globe" ? "🗺 Flat" : "🌍 Globe"}
-        </HudButton>
-        <HudButton onClick={toggleMode}>
-          {mode === "nature" ? "🌑 Night" : "🌱 Nature"}
-        </HudButton>
-        <HudButton onClick={() => setShowFollow((v) => !v)}>
-          📧 Follow
-        </HudButton>
+      {ready && (
+        <div className="status-bar glass">
+          <span className="live-dot" aria-label="live" />
+          <span>{eventsRef.current.length} events</span>
+          <span className="updated">data: {dataSource} · updated {lastPullRef.current ? humanized(lastPullRef.current) : "now"}</span>
+        </div>
+      )}
+      <div className="top-bar glass">
+        <div className="wordmark">
+          OrbiPin <span className="tagline">Every event, a pin on the planet</span>
+        </div>
+        <div className="hud-controls">
+          <div className="segmented" role="group" aria-label="Map mode">
+            <button className={projection === "globe" ? "on" : ""} onClick={() => projection !== "globe" && toggleProjection()}>Globe</button>
+            <button className={projection === "mercator" ? "on" : ""} onClick={() => projection !== "mercator" && toggleProjection()}>Flat</button>
+          </div>
+          <div className="segmented" role="group" aria-label="Theme">
+            <button className={mode === "nature" ? "on" : ""} onClick={() => mode !== "nature" && toggleMode()}>Day</button>
+            <button className={mode === "night" ? "on" : ""} onClick={() => mode !== "night" && toggleMode()}>Night</button>
+          </div>
+          <button className="chip-btn" onClick={() => setShowFollow((v) => !v)}>
+            <Mail size={13} /> Follow
+          </button>
+        </div>
       </div>
       {showFollow && (
         <FollowPanelLazy
@@ -559,47 +573,54 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
   );
 }
 
-function HudButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        padding: "6px 12px",
-        borderRadius: 8,
-        border: "1px solid #2b3f63",
-        background: "#101b2e",
-        color: "#7fb4ff",
-        cursor: "pointer",
-        fontSize: 13,
-      }}
-    >
-      {children}
-    </button>
-  );
+
+function humanized(ms: number): string {
+  if (ms <= 0) return "date unknown";
+  const d = Date.now() - ms;
+  if (d < 3_600_000) return `${Math.max(1, Math.round(d / 60_000))}m ago`;
+  if (d < 86_400_000) return `${Math.round(d / 3_600_000)}h ago`;
+  if (d < 7 * 86_400_000) return `${Math.round(d / 86_400_000)}d ago`;
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
 function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void }) {
   assertNonEmptySources(event.sources);
   const newest = [...event.sources].sort((a, b) => b.publishedAt - a.publishedAt)[0];
+  const [following, setFollowing] = useState(false);
+  // Escape closes the card (a11y, task 8)
+  useEffect(() => {
+    const onKey = (k: KeyboardEvent) => { if (k.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <div className="pin-popup" onClick={(e) => e.stopPropagation()}>
+    <div className="event-card glass" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Event details">
       <button className="close" onClick={onClose} aria-label="Close">✕</button>
-      <h2>
-        Reports of {event.event.toLowerCase()}
-        <span className={`tier-badge tier-${event.tier}`}>{event.tier}</span>
-      </h2>
-      <div>
-        <b>{event.placeName}</b> · {event.sources.length} source{event.sources.length > 1 ? "s" : ""}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span className={`tier-chip ${event.tier}`}>{event.tier}</span>
+        <b>{event.placeName}</b>
+        <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
+          {event.sources.length} source{event.sources.length > 1 ? "s" : ""}
+        </span>
       </div>
-      <div className="quoted">“{event.quotedPhrase}”</div>
+      <h2>Reports of {event.event.toLowerCase()}</h2>
+      <blockquote className="quoted">“{event.quotedPhrase}”</blockquote>
       <div className="sources">
-        Latest:{" "}
-        <a href={newest.url} target="_blank" rel="noreferrer">
-          {newest.publisher}
-        </a>{" "}
-        · {newest.publishedAt > 0
-            ? new Date(newest.publishedAt).toISOString().slice(0, 16).replace("T", " ") + " UTC"
-            : "date unknown"}
+        {event.sources.slice(0, 4).map((s, i) => (
+          <a key={i} className="src-chip" href={s.url} target="_blank" rel="noreferrer">
+            {(s.publisher || "source").slice(0, 22)} · {humanized(s.publishedAt)}
+          </a>
+        ))}
+        {event.sources.length === 0 && <span className="src-chip">no sources</span>}
+      </div>
+      <button
+        className={`follow-story-btn${following ? " following" : ""}`}
+        onClick={() => setFollowing((v) => !v)}
+      >
+        {following ? "Following ✓" : "Follow this story"}
+      </button>
+      <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text-muted)" }}>
+        Latest: {newest.publisher} · {humanized(newest.publishedAt)}
       </div>
     </div>
   );

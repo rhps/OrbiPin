@@ -133,3 +133,29 @@ CC-BY attribution retained.
    restrained → PASS.
 6. All 340 events carry iconId; style-swap survival verified (icons + data
    re-registered).
+
+### 2026-09-22 - UI polish: tokens, chrome, event card, status bar, splash
+`feature/ui-polish`: working-demo → designed-product pass (spec 07 G6, 08).
+1. **Tokens** (`src/theme.css`): space navy bg, frosted-glass panels
+   (backdrop-blur + hairline borders), blue accent / amber highlight / tier
+   semantic colors, spacing+radius+z scales, Inter self-hosted via
+   @fontsource (no runtime CDN). Muted text bumped #8496b3 → #9db0cc (≥4.5:1).
+2. **Chrome**: floating top bar — OrbiPin wordmark + tagline, segmented
+   Globe/Flat + Day/Night controls with visible active state (the bug-grade
+   gap), Follow chip (lucide Mail icon). Verified live: topBar ✓, active
+   segments "Globe"+"Day" ✓. Mobile: tagline collapses.
+3. **Event card**: tier chip + place + source count header, G5 hedge kept
+   ("Reports of…"), quoted phrase as amber-edged blockquote, publisher chips
+   with humanized dates ("1m ago", "date unknown" — never epoch), Follow
+   this story toggle, 200ms slide-in, Escape closes (verified live ✓),
+   bottom-sheet at mobile width.
+4. **Follow panel**: same glass language, segmented cadence, email focus
+   ring, "Following X ✓" state when already subscribed.
+5. **Map paint**: pulse/halo shipped in the category-icons session (G6
+   restrained honored); area hover uses amber token already.
+6. **Status bar**: live pulsing green dot + "376 events" + "data: convex ·
+   updated 1m ago" (tabular numerals). Verified live ✓.
+7. **Splash**: 📍 mark + "Loading globe…" + spinner (reduced-motion aware).
+8. **A11y/motion**: prefers-reduced-motion kills pulse/slide/shimmer;
+   :focus-visible 2px accent rings; touch targets ≥36-44px.
+Bundle: 1261 KB JS (fonts/icons CSS-side; within budget).
