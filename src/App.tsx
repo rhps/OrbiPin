@@ -126,9 +126,11 @@ export default function App() {
           map.addSource("events", {
             type: "geojson",
             data: fc,
+            // spec 03 responsive clustering: pins split early — by z6 the user
+            // sees individual events, not merged blobs. Small radius = fine-grained.
             cluster: true,
-            clusterRadius: 35,
-            clusterMaxZoom: 14,
+            clusterRadius: 18,
+            clusterMaxZoom: 6,
           });
         }
         if (!map.getSource("areas")) {
