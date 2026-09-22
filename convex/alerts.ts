@@ -2,7 +2,7 @@
 // Actions send via AgentMail; mutations do the Convex-side detection/batching.
 
 import { v } from "convex/values";
-import { internalAction, internalMutation, internalQuery, action } from "./_generated/server";
+import { internalAction, internalQuery } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 
 const AGENTMAIL_API = "https://agentmail.to/v0";
@@ -49,7 +49,7 @@ export const alertFollowersOfNewEvent = internalAction({
 export const sendDigests = internalAction({
   args: { kind: v.union(v.literal("daily"), v.literal("weekly")) },
   handler: async (ctx, args) => {
-    const events: any[] = await ctx.runQuery(api.mapData.activeEventsGeo, {});
+    const events: any = await ctx.runQuery(api.mapData.activeEventsGeo, {});
     const features: any[] = events.features ?? [];
     // group by followed region is done per-follower below (v1: one digest per follower address)
     const followers: any[] = await ctx.runQuery(internal.followers.allDigestFollowers, { kind: args.kind });
@@ -88,7 +88,7 @@ export const wasNightAt = (lng: number, at: Date) => {
   const rad = Math.PI / 180;
   const start = Date.UTC(at.getUTCFullYear(), 0, 0);
   const day = (at.getTime() - start) / 86400000;
-  const decl = -23.44 * Math.cos(rad * (360 / 365.24) * (day + 10));
+  // decl (unused in this copy — terminator rendering is client-side)
   const B = rad * (360 / 365.24) * (day - 81);
   const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
   const utcHours = at.getUTCHours() + at.getUTCMinutes() / 60;
