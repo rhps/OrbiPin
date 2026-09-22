@@ -5,7 +5,6 @@ import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { EventFeature } from "./types";
 import { demoEvents } from "./demoData";
-import { demoAreas } from "./demoAreas";
 import * as solar from "./lib/solar";
 import { registerAreaHighlight } from "./lib/areaHighlight";
 import { assertNonEmptySources } from "./types";
@@ -144,7 +143,9 @@ export default function App() {
           });
         }
         if (!map.getSource("areas")) {
-          map.addSource("areas", { type: "geojson", data: { type: "FeatureCollection", features: demoAreas } });
+          // empty by default — demo polygons removed (user request). Real
+          // region polygons arrive with the geoBoundaries integration (spec 02).
+          map.addSource("areas", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         }
         // spiderfy source: non-clustered so spread pins NEVER re-group
         if (!map.getSource("spider-pins")) {
