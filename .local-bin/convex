@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Wrapper: inject --preview-name for `run` calls (static-hosting upload probe)
+for a in "$@"; do
+  if [ "$a" = "run" ]; then
+    exec node /root/ProjectX/OrbiPin/node_modules/convex/dist/cli.bundle.cjs "$@" --preview-name feature-mvp
+  fi
+done
+exec node /root/ProjectX/OrbiPin/node_modules/convex/dist/cli.bundle.cjs "$@"
