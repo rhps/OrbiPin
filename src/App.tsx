@@ -285,9 +285,20 @@ export default function App() {
       map.on("mouseenter", "event-pins", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "event-pins", () => { map.getCanvas().style.cursor = ""; });
       map.on("click", (e: maplibregl.MapMouseEvent) => {
-        const feats = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins"] });
+        const feats = map.queryRenderedFeatures(e.point, { layers: ["event-clusters", "event-pins", "spider-pins"] });
         if (feats.length === 0 && (window as any).__orbiSpiderActive) { clearSpiderfy(); }
       });
+
+      // spiderfied pins: select on click (opens popup, no collapse)
+      map.on("click", "spider-pins", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+        const f = e.features?.[0];
+        if (!f) return;
+        const id = (f.properties as { id?: string }).id;
+        const ev = eventsRef.current.find((x) => x._id === id);
+        if (ev) setSelected(ev);
+      });
+      map.on("mouseenter", "spider-pins", () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", "spider-pins", () => { map.getCanvas().style.cursor = ""; });
       } catch (e: any) {
         dbg(`MAP INIT FAILED: ${e?.message ?? e}`);
         setReady(false);
