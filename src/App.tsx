@@ -188,8 +188,8 @@ export default function App() {
             paint: {
               "line-color": ["match", ["get", "code"], "ID-JB", "#ffb020", "TLS", "#39d98a", "#ffffff"],
               "line-width": ["case", ["boolean", ["feature-state", "hover"], false], 3, 1.4],
-              "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 1, 0.55],
-              // glow under hovered region
+              // hidden by default — outline only shows on hover (lift effect)
+              "line-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 1, 0],
               "line-blur": ["case", ["boolean", ["feature-state", "hover"], false], 2, 0],
             },
           });
