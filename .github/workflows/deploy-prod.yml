@@ -1,0 +1,32 @@
+name: Deploy Production
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Gates (G5 type audit minimum)
+        run: npx tsc --noEmit
+      - name: Deploy backend (prod)
+        run: npx convex deploy
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PROD_DEPLOY_KEY }}
+      - name: Build frontend with prod Convex URL
+        run: npm run build
+        env:
+          VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+      - name: Upload static assets (prod)
+        run: npx convex deploy --prod
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PROD_DEPLOY_KEY }}
