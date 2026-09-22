@@ -20,6 +20,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "deploy:site": "vite build && npx @convex-dev/static-hosting upload dist --preview-name feature-mvp"
+    "deploy:site": "vite build && npx @convex-dev/static-hosting upload dist --preview-name feature-mvp",
+    "gate": "node scripts/gate-icons.mjs && node scripts/gate-search.mjs && tsc --noEmit"
   }
 }

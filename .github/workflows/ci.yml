@@ -16,6 +16,10 @@ jobs:
       - run: npm ci
       - name: Typecheck (G5 audit)
         run: npx tsc --noEmit
+      - name: Gate — icons (G6 + sprite set)
+        run: node scripts/gate-icons.mjs
+      - name: Gate — search (spec 12 fixture wiring)
+        run: node scripts/gate-search.mjs
       - name: Preview deploy (throwaway — never touches prod)
         run: npx convex deploy --preview-name pr-${{ github.event.number }}
         env:

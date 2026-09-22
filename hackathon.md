@@ -227,3 +227,11 @@ muted" (G6 honored — restraint is per-pin, unaffected by replay).
 Dependency check passed: 0% epoch dates (394 events, all real dates).
 Note: corpus is fresh (most articles <24h old) so replay starts near-empty
 and fills — honest representation of when news actually landed.
+
+### 2026-09-22 - production prep
+`prep/production`: `npm run gate` wired (icons G6 + search fixture + tsc).
+CI runs all gates on PRs (preview deploys only). deploy-prod.yml fixed
+(static upload via @convex-dev/static-hosting, was misusing convex deploy
+--prod); triggers on v* tags; needs CONVEX_PROD_DEPLOY_KEY secret +
+VITE_CONVEX_URL var in GitHub. README updated with status + deploy docs.
+All gates PASS on the branch. NOT merged to main (owner instruction).

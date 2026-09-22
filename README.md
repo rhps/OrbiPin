@@ -7,10 +7,32 @@ follow-by-email habit loop.
 **Stack:** Convex (backend, DB, realtime, hosting) · MapLibre GL JS (globe) ·
 OpenFreeMap (tiles) · Firecrawl (ingestion) · OpenAI (extraction) · AgentMail (inbox)
 
-## Status
+## Status — feature-complete MVP
 
-MVP in progress on branch `feature/mvp-implementation`. Specs live in the
-product vault (`7-Hackathon/Convex/`).
+Live: https://striped-impala-387.convex.site · Specs live in the product
+vault (`7-Hackathon/Convex/`) · Evidence log: `hackathon.md`
+
+**Feature branches (not yet merged to main):** `feature/search` ·
+`feature/transparency` · `feature/commentary-loop` · `feature/category-fix` ·
+`feature/region-detect` · `feature/day-replay` · `prep/production`
+
+**Shipped:** globe + 231-country hover areas (exact PIP hit-testing) ·
+full-text search (Convex searchIndex, `/` shortcut) · transparency panel ·
+follow-by-email habit loop · reader commentary loop (seeds + inbound) ·
+14 category icons (Fluent 3D, G6 restrained conflict/military) · day replay
+· branded splash · day/night terminator · spiderfy clustering.
+
+## Gates & deploy
+
+```bash
+npm run gate                 # icons (G6) + search fixture + tsc
+npx convex deploy            # backend to prod
+npm run build && npx @convex-dev/static-hosting upload dist   # site
+```
+
+CI runs gates on every PR (preview deploy, never touches prod).
+Production deploys on `v*` tags via `.github/workflows/deploy-prod.yml`
+(needs `CONVEX_PROD_DEPLOY_KEY` secret + `VITE_CONVEX_URL` var).
 
 ## Development
 

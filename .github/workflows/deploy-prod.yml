@@ -26,7 +26,9 @@ jobs:
         run: npm run build
         env:
           VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
-      - name: Upload static assets (prod)
-        run: npx convex deploy --prod
+      - name: Upload static site (prod)
+        run: npx @convex-dev/static-hosting upload dist
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PROD_DEPLOY_KEY }}
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PROD_DEPLOY_KEY }}
