@@ -35,9 +35,18 @@ export const activeEventsGeo = query({
           latestPublisher: newest.publisher,
           latestUrl: newest.url,
           latestPublishedAt: newest.publishedAt || 0,
+          commentaryCount: 0,
         },
         geometry: { type: "Point", coordinates: [ev.lng, ev.lat] },
       });
+    }
+    // enrich with commentary counts (badge)
+    const cRows = await ctx.db.query("commentary").collect();
+    const cCounts: Record<string, number> = {};
+    for (const r of cRows) if (r.autoApproved) cCounts[r.eventId] = (cCounts[r.eventId] ?? 0) + 1;
+    for (const f of features) {
+      const id = f.properties.id as string;
+      (f.properties as any).commentaryCount = cCounts[id] ?? 0;
     }
     return { type: "FeatureCollection", features };
   },

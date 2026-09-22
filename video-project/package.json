@@ -1,0 +1,22 @@
+{
+  "name": "orbipin-demo-video",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render OrbiPinDemo out/orbipin-demo.mp4 --codec=h264"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.519",
+    "@remotion/google-fonts": "4.0.519",
+    "@remotion/media": "4.0.519",
+    "@remotion/sfx": "4.0.519",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.519"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "typescript": "5.9.3"
+  }
+}

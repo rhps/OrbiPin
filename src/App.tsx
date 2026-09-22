@@ -385,6 +385,22 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
             paint: { "text-color": "#ffffff" },
           });
         }
+          // commentary badge: amber ring under pins that have reader reports
+          if (!map.getLayer("event-pin-badge")) {
+            map.addLayer({
+              id: "event-pin-badge",
+              type: "circle",
+              source: "events",
+              filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "hasCommentary"], true]],
+              paint: {
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 13, 10, 22],
+                "circle-color": "rgba(0,0,0,0)",
+                "circle-stroke-color": "#ffb020",
+                "circle-stroke-width": 1.6,
+                "circle-stroke-opacity": 0.9,
+              },
+            });
+          }
           // breathing halo under icons — non-restrained categories only (G6)
           map.addLayer({
             id: "event-pin-halo",
@@ -729,6 +745,50 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
       <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text-muted)" }}>
         Latest: {newest.publisher} · {humanized(newest.publishedAt)}
       </div>
+      <OnTheGround eventId={event._id} convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"} />
+    </div>
+  );
+}
+
+function OnTheGround({ eventId, convexUrl }: { eventId: string; convexUrl: string }) {
+  const [rows, setRows] = useState<any[]>([]);
+  useEffect(() => {
+    let alive = true;
+    const load = () => {
+      if (!eventId) return;
+      fetch(`${convexUrl}/api/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "commentaryMutations:listForEvent", args: { eventId }, format: "json" }),
+      })
+        .then((r) => r.json())
+        .then((j) => { if (alive) setRows(j.value ?? []); })
+        .catch(() => { if (alive) setRows([]); });
+    };
+    load();
+    const t = window.setTimeout(load, 1200); // retry once (card settle race)
+    return () => { alive = false; window.clearTimeout(t); };
+  }, [eventId, convexUrl]);
+  if (rows.length === 0) return null;
+  const shown = rows.slice(0, 3);
+  const more = rows.length - shown.length;
+  return (
+    <div style={{ marginTop: 12, borderTop: "1px solid var(--border-hairline)", paddingTop: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--amber)", letterSpacing: "0.03em" }}>
+        On the ground · unverified reader reports
+      </div>
+      {shown.map((c: any) => (
+        <div key={c._id} style={{ margin: "8px 0 0" }}>
+          <div style={{ fontSize: 12.5, color: "var(--text)", fontStyle: "italic" }}>“{c.body}”</div>
+          <div style={{ fontSize: 10.5, color: "var(--text-muted)", marginTop: 2 }}>
+            {c.authorLabel} · {humanized(c.receivedAt)}{c.seeded ? " · sample" : ""}
+          </div>
+        </div>
+      ))}
+      {more > 0 && <div className="src-chip" style={{ marginTop: 6 }}>+{more} more</div>}
+      <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 8 }}>
+        Reply to any OrbiPin email to add yours — reviewed before showing.
+      </div>
     </div>
   );
 }
@@ -840,6 +900,7 @@ function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displa
         iconId: categoryOf(ev.event).iconId,
         catColor: categoryOf(ev.event).color,
         restrained: categoryOf(ev.event).restrained,
+        hasCommentary: ("commentaryCount" in ev ? (ev as any).commentaryCount : 0) > 0,
         highlight: "geoCode" in ev && ev.geoCode ? ev.geoCode : "",
       },
       geometry: { type: "Point" as const, coordinates: [ev._displayLng ?? ev.lng ?? 0, ev._displayLat ?? ev.lat ?? 0] },

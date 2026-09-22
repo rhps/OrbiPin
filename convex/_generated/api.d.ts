@@ -9,6 +9,7 @@
  */
 
 import type * as alerts from "../alerts.js";
+import type * as commentaryMutations from "../commentaryMutations.js";
 import type * as crawl from "../crawl.js";
 import type * as crons from "../crons.js";
 import type * as events from "../events.js";
@@ -36,6 +37,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   alerts: typeof alerts;
+  commentaryMutations: typeof commentaryMutations;
   crawl: typeof crawl;
   crons: typeof crons;
   events: typeof events;

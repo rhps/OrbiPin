@@ -29,6 +29,7 @@ export function createEventsStream(onData: (events: EventFeature[]) => void) {
       lastSeenAt: f.properties.lastSeenAt,
       occurredAt: 0,
       sourceCount: f.properties.sourceCount,
+      commentaryCount: f.properties.commentaryCount ?? 0,
     })) as EventFeature[];
     onData(events);
     } catch { /* transient network */ }

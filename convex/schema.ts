@@ -81,6 +81,17 @@ export default defineSchema({
     .index("by_address", ["address"]),
 
   // spec 09: timeline ("on this day" + scrubber)
+  // reader on-the-ground commentary (email replies; seeds labeled seeded:true)
+  commentary: defineTable({
+    eventId: v.id("events"),
+    body: v.string(),            // <=280 chars, enforced at write
+    authorLabel: v.string(),     // e.g. "Reader in Jakarta"
+    receivedAt: v.number(),
+    verified: v.boolean(),       // always false until a real verification path exists
+    seeded: v.optional(v.boolean()), // demo seeds — honesty flag
+    autoApproved: v.optional(v.boolean()),
+  }).index("by_event", ["eventId"]),
+
   timelineMeta: defineTable({
     eventId: v.id("events"),
     occurredOn: v.string(), // YYYY-MM-DD for on-this-day queries

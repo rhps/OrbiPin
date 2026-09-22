@@ -171,3 +171,21 @@ use flag — style swaps never resurrect it), 300ms fade then remove().
 (reload). Reduced-motion: no rocking, static icon. Chrome-verified live:
 splash removed after load ✓, stays gone across style swap ✓, layers
 intact ✓.
+
+### 2026-09-22 - "On the ground" reader commentary (Part B: demo seeds)
+`feature/commentary-loop`: closed-loop UI for reader reports.
+1. **Schema**: `commentary` table (eventId, body ≤280, authorLabel, receivedAt,
+   verified:false always, seeded flag, autoApproved).
+2. **Seeds**: 12 comments across 8 events (calm eyewitness bank), `seeded:true`,
+   labeled "sample" in the UI. API verified: listForEvent returns rows.
+3. **Card UI**: "On the ground · unverified reader reports" section — quoted
+   bodies, authorLabel + humanized age + sample flag, cap 3 + "+N more",
+   honest footer "Reply to any OrbiPin email to add yours — reviewed before
+   showing." Chrome-verified live on the badged typhoon event (search
+   "dujuan causes flooding" → card shows 3 seeded comments).
+4. **Pin badge**: `event-pin-badge` amber ring on pins with commentary
+   (mapData carries commentaryCount; verified rendering at Tokyo z7/z8).
+   Note: overlapping sibling pins can grab a click at stacked pixels —
+   expected with perfect coordinate stacking; search-pin path is exact.
+5. Low-zoom area hit-test fixes (bbox loader, exact PIP, ISO3→ISO2) landed
+   same branch, verified: shift-click Japan → 19 events/6 publishers.
