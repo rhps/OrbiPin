@@ -2,7 +2,7 @@
   "dependencies": {
     "@convex-dev/static-hosting": "^0.2.1",
     "convex": "^1.46.0",
-    "maplibre-gl": "^6.10.0",
+    "maplibre-gl": "^5.24.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },

@@ -89,6 +89,7 @@ export const wasNightAt = (lng: number, at: Date) => {
   const start = Date.UTC(at.getUTCFullYear(), 0, 0);
   const day = (at.getTime() - start) / 86400000;
   void -23.44;
+  // decl (unused in this copy — terminator rendering is client-side)
   const B = rad * (360 / 365.24) * (day - 81);
   const eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
   const utcHours = at.getUTCHours() + at.getUTCMinutes() / 60;
