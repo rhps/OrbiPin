@@ -14,6 +14,7 @@ import { categoryOf } from "./lib/categories";
 import { Mail } from "lucide-react";
 import { Search as SearchIcon } from "lucide-react";
 import SearchPanelLazy from "./SearchPanel";
+import TransparencyPanelLazy from "./TransparencyPanel";
 import { spreadCoordinates } from "./lib/pinSpread";
 
 const BASE_STYLES = {
@@ -45,6 +46,7 @@ export default function App() {
   const [projection, setProjection] = useState<"globe" | "mercator">("globe");
   const [showSearch, setShowSearch] = useState(false);
   const [queryActive, setQueryActive] = useState(false);
+  const [aboutRegion, setAboutRegion] = useState<{ geoCode: string; name: string } | null>(null);
 
   const lastPullRef = useRef<number>(Date.now());
   useEffect(() => {
@@ -54,6 +56,15 @@ export default function App() {
     map.setPaintProperty("event-pins", "icon-opacity", ["case", ["==", ["get", "restrained"], true], 0.75 * (queryActive ? 0.2 : 1), op]);
     if (map.getLayer("event-pin-halo")) map.setPaintProperty("event-pin-halo", "circle-opacity", queryActive ? 0.05 : 0.3);
   }, [queryActive]);
+
+  useEffect(() => {
+    const onAbout = (e: Event) => {
+      const d = (e as CustomEvent).detail as { geoCode: string; name: string };
+      setAboutRegion(d);
+    };
+    window.addEventListener("orbipin:about-region", onAbout);
+    return () => window.removeEventListener("orbipin:about-region", onAbout);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -70,9 +81,10 @@ export default function App() {
   const [dataSource, setDataSource] = useState<"demo" | "convex">("demo");
   const [showFollow, setShowFollow] = useState(false);
   const [followRegion, setFollowRegion] = useState<{ geoCode: string; label: string } | null>(null);
-// world coverage: country manifest (code, lon, lat, bytes) fetched at boot —
-// 231 geoBoundaries ADM0 assets in public/areas/, lazy-loaded per viewport
-type AreaEntry = [string, number, number, number];
+// world coverage: country manifest [{code, bbox, bytes}] fetched at boot —
+// 231 geoBoundaries ADM0 assets, lazy-loaded when a country's BBOX overlaps
+// the viewport (centroid test missed countries whose center sat off-view)
+interface AreaEntry { code: string; bbox: [number, number, number, number]; bytes: number; }
 let AREA_MANIFEST: AreaEntry[] | null = null;
 
   const dbg = (_line: string) => { /* debug overlay removed per user request */ };
@@ -208,6 +220,13 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
             type: "geojson",
             data: { type: "FeatureCollection", features: [] },
             promoteId: "code",
+            // keep detail at low zooms: default geojson-vt simplification at
+            // z5 fattens country outlines into neighboring seas (CHN blanket
+            // bug). maxzoom forces tiles to be cut at z7 detail and over-zoomed
+            // when viewing lower — thin borders survive.
+            tolerance: 0.3,
+            buffer: 0,
+            maxzoom: 7,
           });
           const loaded = new Set<string>();
           const loadAreas = () => {
@@ -215,15 +234,19 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
             if (!src2 || !AREA_MANIFEST) return;
             const bounds = map.getBounds();
             // fetch up to 12 unseen countries per moveend (burst-limited)
-            const inView = AREA_MANIFEST.filter(
-              ([code, lon, lat]) =>
-                !loaded.has(code) && bounds.contains([lon, lat] as maplibregl.LngLatLike)
-            ).slice(0, 12);
+            const vw = bounds.getWest(), vs = bounds.getSouth(), ve = bounds.getEast(), vn = bounds.getNorth();
+            const inView = AREA_MANIFEST.filter((c) => {
+              if (loaded.has(c.code)) return false;
+              const [w, s, e, n] = c.bbox;
+              return w <= ve && e >= vw && s <= vn && n >= vs; // bbox overlap
+            })
+              .sort((a, b) => a.bytes - b.bytes) // small countries first
+              .slice(0, 14);
             if (inView.length === 0) return;
-            inView.forEach(([code]) => loaded.add(code));
+            inView.forEach((c) => loaded.add(c.code));
             void Promise.all(
-              inView.map(([code]) =>
-                fetch(`${import.meta.env.BASE_URL}areas/${code}.geojson`)
+              inView.map((c) =>
+                fetch(`${import.meta.env.BASE_URL}areas/${c.code}.geojson`)
                   .then((r) => (r.ok ? r.json() : null))
                   .catch(() => null)
               )
@@ -304,22 +327,34 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
 
         // country hover LIFT via feature-state (promoteId makes ids bind now)
         let hoveredAreaId: string | number | null = null;
-        map.on("mousemove", "area-fill", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-          map.getCanvas().style.cursor = "pointer";
-          const f = e.features?.[0];
-          const id = f?.id;
-          if (id == null) return;
-          if (hoveredAreaId !== null && hoveredAreaId !== id)
-            map.setFeatureState({ source: "areas", id: hoveredAreaId }, { hover: false });
-          hoveredAreaId = id;
-          map.setFeatureState({ source: "areas", id }, { hover: true });
-        });
-        map.on("mouseleave", "area-fill", () => {
-          map.getCanvas().style.cursor = "";
-          if (hoveredAreaId !== null) {
-            map.setFeatureState({ source: "areas", id: hoveredAreaId }, { hover: false });
-            hoveredAreaId = null;
+        // unlayered hover: vt query over-simplifies at low zoom, so exact PIP
+        // decides (cheap: unproject + few-hundred-vertex rings, ~26 features)
+        map.on("mousemove", (e: maplibregl.MapMouseEvent) => {
+          const overPin = map.queryRenderedFeatures(e.point, {
+            layers: ["event-pins", "event-clusters", "spider-pins"],
+          }).length > 0;
+          if (overPin) {
+            if (hoveredAreaId !== null) {
+              map.setFeatureState({ source: "areas", id: hoveredAreaId }, { hover: false });
+              hoveredAreaId = null;
+            }
+            return;
           }
+          void exactAreaAt(map, e.point).then((hit) => {
+            if (!hit || !hit.code) {
+              if (hoveredAreaId !== null) {
+                map.setFeatureState({ source: "areas", id: hoveredAreaId }, { hover: false });
+                hoveredAreaId = null;
+                map.getCanvas().style.cursor = "";
+              }
+              return;
+            }
+            map.getCanvas().style.cursor = "pointer";
+            if (hoveredAreaId !== null && hoveredAreaId !== hit.code)
+              map.setFeatureState({ source: "areas", id: hoveredAreaId }, { hover: false });
+            hoveredAreaId = hit.code;
+            map.setFeatureState({ source: "areas", id: hit.code }, { hover: true });
+          });
         });
         if (!map.getLayer("event-clusters")) {
           map.addLayer({
@@ -413,16 +448,20 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
 
         // spec 02/05: click an area polygon → subscribe box for that region.
         // Pins win over areas (registered later = on top; also guard below).
-        map.on("click", "area-fill", (e: maplibregl.MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+        map.on("click", (e: maplibregl.MapMouseEvent & { originalEvent?: MouseEvent }) => {
+          // background click also collapses spiderfy (separate handler runs first)
           const pinHit = map.queryRenderedFeatures(e.point, { layers: ["event-pins", "event-clusters", "spider-pins"] });
           if (pinHit.length > 0) return; // pin wins — area is fallback target
-          const f = e.features?.[0];
-          if (!f) return;
-          const p = f.properties as { code?: string; name?: string };
-          const code = p.code ?? "";
-          if (!code) return;
-          setFollowRegion({ geoCode: code, label: p.name ?? code });
-          setShowFollow(true);
+          void exactAreaAt(map, e.point).then((hit) => {
+            if (!hit || !hit.code) return;
+            // shift/ctrl-click → transparency stats; plain click → follow box
+            if (e.originalEvent && (e.originalEvent.shiftKey || e.originalEvent.ctrlKey || e.originalEvent.metaKey)) {
+              setAboutRegion({ geoCode: hit.code, name: hit.name });
+              return;
+            }
+            setFollowRegion({ geoCode: hit.code, label: hit.name });
+            setShowFollow(true);
+          });
         });
 
         // breathing halo pulse (sine 0.15↔0.45, 1.2s) — respects reduced motion
@@ -606,6 +645,14 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
           setQueryActive(false);
         }}
       />
+      {aboutRegion && (
+        <TransparencyPanelLazy
+          convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}
+          geoCode={aboutRegion.geoCode}
+          regionName={aboutRegion.name}
+          onClose={() => setAboutRegion(null)}
+        />
+      )}
       {showFollow && (
         <FollowPanelLazy
           convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}
@@ -666,6 +713,19 @@ function PinPopup({ event, onClose }: { event: EventFeature; onClose: () => void
       >
         {following ? "Following ✓" : "Follow this story"}
       </button>
+      {"geoCode" in event && event.geoCode ? (
+        <button
+          className="src-chip"
+          style={{ marginTop: 8, background: "none", cursor: "pointer", width: "100%" }}
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("orbipin:about-region", {
+              detail: { geoCode: event.geoCode, name: event.placeName },
+            }));
+          }}
+        >
+          About {event.placeName} — how we locate events
+        </button>
+      ) : null}
       <div style={{ marginTop: 6, fontSize: 10.5, color: "var(--text-muted)" }}>
         Latest: {newest.publisher} · {humanized(newest.publishedAt)}
       </div>
@@ -805,7 +865,45 @@ function updateTerminator(map: maplibregl.Map) {
     features: [solar.nightPolygon(solar.sunSubpoint(new Date()))] as unknown as GeoJSON.Feature[],
   };
   src.setData(fc);
-}// branded splash (index.html #orbipin-splash): fade + remove on first map
+}// precise area hit-test: queryRenderedFeatures over-simplifies big polygons
+// at low zoom (CHN blanket bug) — do exact point-in-polygon on the source data
+function pointInRing(x: number, y: number, ring: number[][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1], xj = ring[j][0], yj = ring[j][1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function pointInGeometry(x: number, y: number, geom: any): boolean {
+  if (!geom) return false;
+  const polys = geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates ?? [];
+  for (const poly of polys) {
+    if (poly.length === 0) continue;
+    if (pointInRing(x, y, poly[0]) && !poly.slice(1).some((r: number[][]) => pointInRing(x, y, r)))
+      return true;
+  }
+  return false;
+}
+async function exactAreaAt(
+  map: maplibregl.Map,
+  pt: { x: number; y: number }
+): Promise<{ code: string; name: string } | null> {
+  const src = map.getSource("areas") as maplibregl.GeoJSONSource | undefined;
+  if (!src) return null;
+  const ll = map.unproject(pt as maplibregl.PointLike);
+  const data: any = await src.getData();
+  // topmost = last added wins; iterate reversed
+  for (let i = data.features.length - 1; i >= 0; i--) {
+    const f = data.features[i];
+    if (pointInGeometry(ll.lng, ll.lat, f.geometry)) {
+      return { code: f.properties?.code ?? "", name: f.properties?.name ?? f.properties?.code ?? "" };
+    }
+  }
+  return null;
+}
+
+// branded splash (index.html #orbipin-splash): fade + remove on first map
 // load; 10s quiet error with retry; single-use.
 let splashDismissed = false;
 function dismissSplash() {

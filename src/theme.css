@@ -265,3 +265,16 @@ blockquote.quoted {
 .r-title { color: var(--text); font-size: 12.5px; font-weight: 500; }
 .r-meta { grid-column: 2; color: var(--text-muted); font-size: 11px; }
 .r-count { color: var(--text-muted); font-size: 11px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+
+/* transparency panel (Feature B) */
+.transparency-panel {
+  position: absolute;
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  z-index: var(--z-panel);
+  width: min(360px, calc(100vw - 32px));
+  padding: 16px 18px;
+}
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.stat { display: flex; flex-direction: column; }
+.stat .num { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.stat .lbl { font-size: 11px; color: var(--text-muted); }

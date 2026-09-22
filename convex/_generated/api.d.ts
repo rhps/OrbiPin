@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as inbound from "../inbound.js";
 import type * as mapData from "../mapData.js";
 import type * as places from "../places.js";
+import type * as regionStats from "../regionStats.js";
 import type * as repair from "../repair.js";
 import type * as reprocess from "../reprocess.js";
 import type * as rss from "../rss.js";
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   inbound: typeof inbound;
   mapData: typeof mapData;
   places: typeof places;
+  regionStats: typeof regionStats;
   repair: typeof repair;
   reprocess: typeof reprocess;
   rss: typeof rss;
