@@ -214,3 +214,16 @@ accepted|dismissed — never asks twice). Accept → Follow panel pre-filled +
 2s amber flash on the region polygon (ISO2→ISO3 mapped for feature-state).
 Unmapped zones show nothing (default-off). Chrome-verified live:
 Europe/London → "Follow the UK" toast → panel opens, pref saved, toast gone.
+
+### 2026-09-22 - Day replay "While the world spun" (Feature D)
+`feature/day-replay`: ▶ Replay 24h dock (bottom-center, appears when ≥10
+events have recent activity). 24h compressed to ~12s (1×/2×/4× speeds),
+pins appear as replay-time passes each event's newest-article publish
+moment; terminator sweeps synced to replay-time (updateTerminator(atTime));
+scrub slider; Exit auto-restores all pins + wall-clock terminator.
+Verified live: 347 pins → filter engages → progressive accumulation →
+auto-restore to 347 ✓. Caption: "times are UTC · sensitive events stay
+muted" (G6 honored — restraint is per-pin, unaffected by replay).
+Dependency check passed: 0% epoch dates (394 events, all real dates).
+Note: corpus is fresh (most articles <24h old) so replay starts near-empty
+and fills — honest representation of when news actually landed.

@@ -27,7 +27,7 @@ export function createEventsStream(onData: (events: EventFeature[]) => void) {
       lat: f.geometry.coordinates[1],
       sources: [{ url: f.properties.latestUrl, publisher: f.properties.latestPublisher, title: f.properties.latestTitle, publishedAt: f.properties.latestPublishedAt || 0 }],
       lastSeenAt: f.properties.lastSeenAt,
-      occurredAt: 0,
+      occurredAt: f.properties.lastSeenAt ?? 0, // first-seen proxy for replay ordering
       sourceCount: f.properties.sourceCount,
       commentaryCount: f.properties.commentaryCount ?? 0,
     })) as EventFeature[];

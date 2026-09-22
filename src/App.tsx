@@ -49,6 +49,60 @@ export default function App() {
   const [queryActive, setQueryActive] = useState(false);
   const [aboutRegion, setAboutRegion] = useState<{ geoCode: string; name: string } | null>(null);
   const [regionToast, setRegionToast] = useState<{ geoCode: string; label: string } | null>(null);
+  const [eventsFilter, setEventsFilter] = useState<{ after: number } | null>(null);
+  useEffect(() => {
+    replayAfterMs = eventsFilter?.after ?? null;
+    // re-apply the (un)filtered set immediately so scrub/exit feel live
+    if (eventsRef.current.length > 0) pushEventsToMap(eventsRef.current as any);
+  }, [eventsFilter]);
+
+  // Feature D: day replay — animate the last 24h (pins + synced terminator)
+  const [replaying, setReplaying] = useState(false);
+  const replayRef = useRef<{ stop: boolean; timer: number | null }>({ stop: false, timer: null });
+  const [replaySpeed, setReplaySpeed] = useState<1 | 2 | 4>(1);
+
+  const stopReplay = (restore = true) => {
+    replayRef.current.stop = true;
+    if (replayRef.current.timer) window.clearInterval(replayRef.current.timer);
+    replayRef.current.timer = null;
+    setReplaying(false);
+    if (restore) {
+      const map = window.__orbipinMap;
+      if (map) {
+        setEventsFilter(null); // all pins back
+        updateTerminator(map); // wall-clock terminator
+      }
+    }
+  };
+
+  const startReplay = () => {
+    const map = window.__orbipinMap;
+    if (!map) return;
+    setReplaying(true);
+    replayRef.current.stop = false;
+    const now = Date.now();
+    const span = 24 * 3600_000;
+    const startAt = now - span;
+    const totalMs = 12_000 / replaySpeed; // 24h compressed into ~12s / speed
+    const t0 = performance.now();
+    let lastApply = 0;
+    const tick = () => {
+      if (replayRef.current.stop) return;
+      const elapsed = performance.now() - t0;
+      const replayTime = startAt + (elapsed / totalMs) * span;
+      // recompute visible set at most every 250ms
+      if (performance.now() - lastApply > 250) {
+        lastApply = performance.now();
+        setEventsFilter({ after: replayTime });
+        updateTerminator(map, replayTime);
+      }
+      if (elapsed >= totalMs) {
+        stopReplay(true);
+        return;
+      }
+    };
+    replayRef.current.timer = window.setInterval(tick, 120);
+  };
   useEffect(() => {
     // Feature C: timezone→region guess, asked ONCE per browser (privacy: tz string only)
     const pref = localStorage.getItem("orbipin:region-pref");
@@ -710,6 +764,39 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
           </button>
         </div>
       )}
+      {(() => {
+        const recent = eventsRef.current.filter((ev: any) => (ev.lastSeenAt ?? 0) > Date.now() - 24 * 3600_000).length;
+        if (recent < 10 && !replaying) return null;
+        return (
+          <div className="replay-dock glass" role="group" aria-label="Day replay">
+            {!replaying ? (
+              <button onClick={startReplay} title="Replay the last 24 hours">▶ Replay 24h</button>
+            ) : (
+              <>
+                <button className="on" onClick={() => stopReplay(true)}>⏸ Exit</button>
+                <input
+                  type="range" min={0} max={100} defaultValue={0}
+                  aria-label="Replay progress"
+                  onChange={(e) => {
+                    const map = window.__orbipinMap;
+                    if (!map) return;
+                    const pct = Number(e.target.value) / 100;
+                    const t = Date.now() - 24 * 3600_000 * (1 - pct);
+                    setEventsFilter({ after: t });
+                    updateTerminator(map, t);
+                  }}
+                />
+                <div className="segmented">
+                  {([1, 2, 4] as const).map((s) => (
+                    <button key={s} className={replaySpeed === s ? "on" : ""} onClick={() => setReplaySpeed(s)}>{s}×</button>
+                  ))}
+                </div>
+              </>
+            )}
+            <span className="cap">{replaying ? "Showing reports from the last 24h · times are UTC · sensitive events stay muted" : ""}</span>
+          </div>
+        );
+      })()}
       {aboutRegion && (
         <TransparencyPanelLazy
           convexUrl={(import.meta as any).env?.VITE_CONVEX_URL ?? "https://striped-impala-387.convex.cloud"}
@@ -908,6 +995,9 @@ function clearSpiderfy() {
 }
 
 
+// day-replay time filter (module-level so pushEventsToMap can read it)
+let replayAfterMs: number | null = null;
+
 function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displayLat?: number })[]) {
   const map = (window as any).__orbipinMap as maplibregl.Map | null;
   const src = map?.getSource("events") as maplibregl.GeoJSONSource | null;
@@ -917,6 +1007,15 @@ function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displa
   // the newest article's title becomes the pin's story. Duplicates are tracked
   // in hiddenByGroup so spiderfy/expand can reveal them later.
   const visible: typeof events = [];
+    const afterMs = replayAfterMs;
+    const filtered = afterMs
+      ? visible.filter((ev: any) => {
+          // pin appears when replay-time passes its newest article's publish
+          // moment (corpus has real publishedAt spread; first-seen is all-today)
+          const t = ev.sources?.[0]?.publishedAt ?? ev.occurredAt ?? ev.lastSeenAt ?? 0;
+          return t > 0 && t <= afterMs;
+        })
+      : visible;
   const hiddenByGroup: { key: string; items: typeof events }[] = [];
   const groups = new Map<string, typeof events>();
   for (const ev of events) {
@@ -935,7 +1034,7 @@ function pushEventsToMap(events: (EventFeature & { _displayLng?: number; _displa
 
   const fc: GeoJSON.FeatureCollection = {
     type: "FeatureCollection",
-    features: visible.map((ev, i) => ({
+    features: filtered.map((ev, i) => ({
       type: "Feature" as const,
       id: i + 1,
       properties: {
@@ -967,12 +1066,13 @@ function tierColor(tier: string): string {
   }
 }
 
-function updateTerminator(map: maplibregl.Map) {
+function updateTerminator(map: maplibregl.Map, atTime?: number) {
   const src = map.getSource("night-side") as maplibregl.GeoJSONSource | undefined;
   if (!src || !map.isStyleLoaded()) return;
+  const when = atTime != null ? new Date(atTime) : new Date();
   const fc: GeoJSON.FeatureCollection = {
     type: "FeatureCollection",
-    features: [solar.nightPolygon(solar.sunSubpoint(new Date()))] as unknown as GeoJSON.Feature[],
+    features: [solar.nightPolygon(solar.sunSubpoint(when))] as unknown as GeoJSON.Feature[],
   };
   src.setData(fc);
 }// precise area hit-test: queryRenderedFeatures over-simplifies big polygons
