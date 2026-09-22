@@ -189,3 +189,18 @@ intact ✓.
    expected with perfect coordinate stacking; search-pin path is exact.
 5. Low-zoom area hit-test fixes (bbox loader, exact PIP, ISO3→ISO2) landed
    same branch, verified: shift-click Japan → 19 events/6 publishers.
+
+### 2026-09-22 - category starvation fix + Fluent 3D icons
+`feature/category-fix` (NOT merged to main per owner instruction):
+1. **Icon set**: 13 FluentUI Emoji 3D PNGs (MIT) self-hosted + Twemoji pushpin
+   fallback for `other` (CC-BY 4.0) — CREDITS.md records origins. All 14
+   registered per style.load; verified 14/14 loaded AND 14/14 after a style
+   swap (Flat/Night/Globe).
+2. **Category set 9 → 14**: added crime, military (restrained per G6),
+   economy, transport, culture. Config is data (categories.ts table).
+3. **Classifier**: keyword lists expanded over 3 measured passes against the
+   live corpus. Distribution: other 260/372 (70%) → 68/357 (19%) on the live
+   source; politics 23%, conflict 16% (within the 5–25% band), economy 15%,
+   crime 8%, transport 7%, military 5%. Sanity band met (other ≤25%).
+4. Live iconId mix matches; conflict+military restrained (no halo, dimmed).
+   Gate `scripts/gate-icons.mjs` PASS (14 icons shipped, conflict restrained).

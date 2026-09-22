@@ -201,6 +201,11 @@ let AREA_MANIFEST: AreaEntry[] | null = null;
             "cat-volcano": "icons/volcano.png",
             "cat-health": "icons/health.png",
             "cat-politics": "icons/politics.png",
+            "cat-crime": "icons/crime.png",
+            "cat-military": "icons/military.png",
+            "cat-economy": "icons/economy.png",
+            "cat-transport": "icons/transport.png",
+            "cat-culture": "icons/culture.png",
             "cat-other": "icons/other.png",
           };
           for (const [id, url] of Object.entries(ICONS)) {
